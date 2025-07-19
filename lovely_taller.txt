@@ -1,29 +1,60 @@
-### Home
-Lovely Taller Deco ofrece muebles para dormitorio, living y comedor. Envios a todo el país, retiro en local, 6 y 12 cuotas sin interés, sitio seguro y protección de datos.
+[UBICACIÓN]
+Julio Argentino Roca 2523, Vicente López, Buenos Aires. :contentReference[oaicite:1]{index=1}
 
-### Puff
-Estructura madera saligna reforzada; telas anti-manchas; demora 45 días; envío interior $1.500; garantía estructural 5 años.
+[CONTACTO]
+Teléfono: 011 6028-1211  
+Email: [email protected]  
+Atención en showroom: sábados 11 a 15 hs. :contentReference[oaicite:2]{index=2}
 
-### Divanes
-Placa soft 26 kg; estructura madera saligna; vellón siliconado; costuras decorativas; telas anti-manchas; demora 35-45 días; envío $3.000; garantía estructural 5 años.
+[GARANTÍA]
+Garantía estructural por 5 años en sillones, esquineros, puff, divanes, respaldos, mecdoeras, sillas. :contentReference[oaicite:3]{index=3}
 
-### Mecedoras
-94×63×61 cm, patas 89 cm; precio $255.000. Diseños en telas resistentes y anti-manchas.
+[ENVÍOS]
+Se retira gratis en taller (Florida – Vicente López).  
+Envío al interior: embalaje $1.500–$3.000 según producto.  
+Inicio preparación tras pago del 50 %. :contentReference[oaicite:4]{index=4}
 
-### Esquineros
-Modelos Queen y Estrella; medidas como 2.20×0.95+1.00×0.80 m; desde $764.000 a $881.000.
+[FORMAS DE PAGO]
+Hasta 12 cuotas sin interés con tarjetas de crédito (Getnet).  
+También debito. :contentReference[oaicite:5]{index=5}
 
-### Sillones
-Bella (1,30×0,85×0,75m – $465.000), Nube ($768.000), Roma ($746.000). Gran variedad de medidas (0,8–3 m) y telas: bouclé, pana, lino, eco cuero.
+[DEMORAS]
+Puff y respaldos: 20–25 días hábiles.  
+Sillones, esquineros, divanes, otros: 35–45 días hábiles. :contentReference[oaicite:6]{index=6}
 
-### Sillas y Comedor
-Sillas Pétalo $260.000; versión doble 1,30 m $341.000, 1,60 m $409.000. Puff también disponible en esta categoría.
+[PUFF]
+Ejemplos:  
+- Puff en bouclé: $101.000, 0,40×0,45 m, estructura saligna, telas anti-manchas. :contentReference[oaicite:7]{index=7}  
+- Puff Cuadrado y Puff Gigante también disponibles. :contentReference[oaicite:8]{index=8}
 
-### Envíos y Políticas
-Envío gratis en algunos casos; interior $1.500–3.000; retiro local gratis; pedido tras pago 50 %; demoras 35-45 días; botón de arrepentimiento; protección de datos.
+[SILLONES]
+- Bella: 1,30×0,85×0,75m – $465.000  
+- Nube: $768.000  
+- Roma: $746.000  
+- Lady: $385.000  
+- Chester: precio según catálogo, misma garantía. :contentReference[oaicite:9]{index=9}  
+Características comunes: estructura saligna, vellón siliconado, telas anti-manchas. :contentReference[oaicite:10]{index=10}
 
-### FAQ
-6-12 cuotas sin interés; telas resistentes; garantía estructural 5 años; consultar CP para envío.
+[ESQUINEROS]
+- Queen: $881.000  
+- Estrella: $764.000  
+- Victoria Liso: $1.031.000  
+- Brooklyn: $678.000  
+- Astor: $651.000  
+- Diva: $1.335.000  
+- Varias versiones capitoné y combinados. :contentReference[oaicite:11]{index=11}
 
-### Contacto
-Julio Argentino Roca 2523, Vicente López. Teléfono: 011 6028-1211. Email: [email protected]
+[DIVANES]
+Información general y precios varían por modelo; mismas características estructurales y demoras. :contentReference[oaicite:12]{index=12}
+
+[MECEDORAS]
+94×63×61 cm, patas 89 cm, precio $255.000, telas resistentes anti-manchas. :contentReference[oaicite:13]{index=13}
+
+[RESPALDOS]
+Respaldos desde $104.000. Ejemplo “Envidiosa”. :contentReference[oaicite:14]{index=14}
+
+[SILLAS DE COMEDOR]
+- Silla Pétalo: $260.000  
+- Pétalo Doble 1,30 m: $341.000  
+- Pétalo Doble 1,60 m: $409.000  
+- Otros modelos: Flux $123.000, Renata $142.000, Clásicas $70.000, Anabel $124.000. :contentReference[oaicite:15]{index=15}
