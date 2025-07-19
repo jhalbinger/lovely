@@ -3,6 +3,7 @@ import openai
 import os
 from dotenv import load_dotenv
 import json
+import re
 
 # === CONFIGURACIONES ===
 load_dotenv()
@@ -27,12 +28,16 @@ if os.path.exists(txt_path):
 else:
     CONTEXTO_COMPLETO = ""
 
-# Memoria simple: última sugerencia enviada
+# Memoria simple por usuario
 ultima_sugerencia = {}
 
 def es_respuesta_corta(texto):
     texto = texto.lower().strip()
     return texto in ["sí", "dale", "contame", "ok", "claro", "obvio", "sí por favor", "por favor"]
+
+def es_saludo(texto):
+    texto = texto.lower().strip()
+    return texto in ["hola", "buenas", "buen día", "buenas tardes", "buenas noches", "hey"]
 
 @app.route("/webhook", methods=["POST"])
 def responder():
@@ -42,15 +47,23 @@ def responder():
         print(json.dumps(datos, indent=2))
 
         mensaje_usuario = datos.get("consulta", "")
-        user_id = datos.get("user_id", "anon")  # Podés pasar un ID de usuario en el JSON para diferenciar sesiones
+        user_id = datos.get("user_id", "anon")  # ID para diferenciar sesiones
         if not mensaje_usuario:
             return jsonify({"error": "No se recibió ninguna consulta"}), 400
 
         global ultima_sugerencia
 
-        # Si el usuario responde "sí" o algo corto, retomamos última sugerencia
+        # 1️⃣ Si el usuario solo responde "sí", retomamos la última sugerencia
         if es_respuesta_corta(mensaje_usuario) and user_id in ultima_sugerencia:
-            mensaje_usuario = ultima_sugerencia[user_id]
+            mensaje_usuario = f"Contame sobre {ultima_sugerencia[user_id]}"
+
+        # 2️⃣ Si el usuario solo dice "hola", en lugar de ignorar, damos la introducción del negocio
+        if es_saludo(mensaje_usuario):
+            mensaje_usuario = (
+                "Presentate como Lovely Taller Deco sin volver a saludar, "
+                "contando quiénes son, qué hacen y sugiriendo 2 temas para continuar "
+                "(por ejemplo, sillones, formas de pago, showroom, etc.)."
+            )
 
         # === PROMPT ULTRA RESTRICTIVO PERO AMIGABLE Y CON EMOJIS ===
         system_prompt = (
@@ -62,7 +75,7 @@ def responder():
             "'Mirá, con lo que tengo acá no te puedo confirmar eso, pero podés llamar al 011 6028‑1211 para más info.' "
             "Después de cada respuesta válida, sugerí 1 o 2 temas del CONTEXTO para continuar la charla "
             "(quiénes somos, showroom, garantía, envíos, precios, demoras, formas de pago). "
-            "Respondé en no más de 2 líneas antes de las sugerencias."
+            "Respondé siempre en no más de 2 líneas antes de las sugerencias."
         )
 
         # Construimos la conversación con TODO el contexto
@@ -78,13 +91,12 @@ def responder():
 
         respuesta_llm = respuesta.choices[0].message.content.strip()
 
-        # Guardamos la última sugerencia detectada
-        # Si la respuesta tiene "¿Querés" o "¿Te cuento", lo tomamos como próxima sugerencia
+        # Guardamos la última sugerencia para continuar la charla
+        # Buscamos si hay algo como "¿Querés..." en la respuesta
         sugerencia_detectada = None
-        for linea in respuesta_llm.split("\n"):
-            if "¿" in linea:
-                sugerencia_detectada = linea.replace("¿", "").replace("?", "").strip()
-                break
+        match = re.search(r"¿Querés([^?]+)\?", respuesta_llm)
+        if match:
+            sugerencia_detectada = match.group(1).strip()
 
         if sugerencia_detectada:
             ultima_sugerencia[user_id] = sugerencia_detectada
