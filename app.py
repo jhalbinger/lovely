@@ -3,7 +3,7 @@ import openai
 import os
 from dotenv import load_dotenv
 import json
-import re
+from collections import defaultdict, deque
 
 # === CONFIGURACIONES ===
 load_dotenv()
@@ -28,12 +28,8 @@ if os.path.exists(txt_path):
 else:
     CONTEXTO_COMPLETO = ""
 
-# Memoria simple por usuario
-ultima_sugerencia = {}
-
-def es_respuesta_corta(texto):
-    texto = texto.lower().strip()
-    return texto in ["sí", "dale", "contame", "ok", "claro", "obvio", "sí por favor", "por favor"]
+# Memoria por usuario: últimas interacciones
+historial_conversacion = defaultdict(lambda: deque(maxlen=6))  # guarda últimas 6 entradas
 
 def es_saludo(texto):
     texto = texto.lower().strip()
@@ -51,20 +47,6 @@ def responder():
         if not mensaje_usuario:
             return jsonify({"error": "No se recibió ninguna consulta"}), 400
 
-        global ultima_sugerencia
-
-        # 1️⃣ Si el usuario solo responde "sí", retomamos la última sugerencia
-        if es_respuesta_corta(mensaje_usuario) and user_id in ultima_sugerencia:
-            mensaje_usuario = f"Contame sobre {ultima_sugerencia[user_id]}"
-
-        # 2️⃣ Si el usuario solo dice "hola", en lugar de ignorar, damos la introducción del negocio
-        if es_saludo(mensaje_usuario):
-            mensaje_usuario = (
-                "Presentate como Lovely Taller Deco sin volver a saludar, "
-                "contando quiénes son, qué hacen y sugiriendo 2 temas para continuar "
-                "(por ejemplo, sillones, formas de pago, showroom, etc.)."
-            )
-
         # === PROMPT ULTRA RESTRICTIVO PERO AMIGABLE Y CON EMOJIS ===
         system_prompt = (
             "Sos un asistente virtual de Lovely Taller Deco. "
@@ -75,11 +57,30 @@ def responder():
             "'Mirá, con lo que tengo acá no te puedo confirmar eso, pero podés llamar al 011 6028‑1211 para más info.' "
             "Después de cada respuesta válida, sugerí 1 o 2 temas del CONTEXTO para continuar la charla "
             "(quiénes somos, showroom, garantía, envíos, precios, demoras, formas de pago). "
-            "Respondé siempre en no más de 2 líneas antes de las sugerencias."
+            "Respondé siempre en no más de 2 líneas antes de las sugerencias. "
+            "Tené en cuenta todo el historial de la conversación para entender respuestas cortas como 'sí' o 'dale'."
         )
 
-        # Construimos la conversación con TODO el contexto
-        user_prompt = f"CONTEXTO:\n{CONTEXTO_COMPLETO}\n\nPREGUNTA DEL USUARIO: {mensaje_usuario}"
+        # === ARMAMOS EL HISTORIAL DE CONVERSACIÓN ===
+        historial = list(historial_conversacion[user_id])  # últimas interacciones
+        mensajes_historial = []
+
+        for rol, msg in historial:
+            mensajes_historial.append({"role": rol, "content": msg})
+
+        # Nuevo mensaje del usuario
+        mensajes_historial.append({"role": "user", "content": mensaje_usuario})
+
+        # Ahora armamos el input con el CONTEXTO + HISTORIAL
+        user_prompt = (
+            f"CONTEXTO:\n{CONTEXTO_COMPLETO}\n\n"
+            "Tené en cuenta la conversación anterior para entender a qué se refiere el usuario:\n\n"
+        )
+
+        for rol, msg in historial:
+            user_prompt += f"{rol.upper()}: {msg}\n"
+
+        user_prompt += f"\nUSUARIO (nuevo): {mensaje_usuario}"
 
         respuesta = client.chat.completions.create(
             model="gpt-4o",
@@ -91,17 +92,9 @@ def responder():
 
         respuesta_llm = respuesta.choices[0].message.content.strip()
 
-        # Guardamos la última sugerencia para continuar la charla
-        # Buscamos si hay algo como "¿Querés..." en la respuesta
-        sugerencia_detectada = None
-        match = re.search(r"¿Querés([^?]+)\?", respuesta_llm)
-        if match:
-            sugerencia_detectada = match.group(1).strip()
-
-        if sugerencia_detectada:
-            ultima_sugerencia[user_id] = sugerencia_detectada
-        else:
-            ultima_sugerencia.pop(user_id, None)
+        # === GUARDAMOS EN HISTORIAL ===
+        historial_conversacion[user_id].append(("user", mensaje_usuario))
+        historial_conversacion[user_id].append(("bot", respuesta_llm))
 
         return jsonify({"respuesta": respuesta_llm})
 
