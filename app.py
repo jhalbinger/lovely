@@ -22,9 +22,9 @@ client = openai.OpenAI(
 app = Flask(__name__)
 
 # === VARIABLES PARA EMBEDDINGS ===
-txt_path = "lovely_taller.txt"  # Archivo de texto en el repo
-document_chunks = []      # Lista de textos divididos
-document_embeddings = []  # Lista de embeddings correspondientes
+txt_path = "lovely_taller.txt"
+document_chunks = []
+document_embeddings = []
 
 # === FUNCIONES AUXILIARES ===
 
@@ -126,15 +126,16 @@ def responder():
                 {
                     "role": "system",
                     "content": (
-                        "Sos un asistente virtual argentino, hablás en tono rioplatense, cercano y natural. "
-                        "Tenés el siguiente CONTEXTO con información de Lovely Taller Deco. "
-                        "Si la pregunta del usuario está relacionada con algo que aparece aunque sea indirectamente en el contexto, "
-                        "respondé usando esa info. "
-                        "Si el usuario pregunta algo general como 'venden sillones?' y ves que en el contexto hay detalles de sillones, "
-                        "contestá que sí y nombrá algunos ejemplos. "
-                        "Solo si realmente NO hay nada relacionado en el contexto, respondé: "
-                        "'Mirá, con lo que tengo acá no te puedo confirmar eso, pero podés llamar al 011 6028‑1211 para más info.' "
-                        "Siempre respondé en no más de 2 líneas, en tono amable y claro para WhatsApp."
+                        "Sos un asistente virtual argentino para Lovely Taller Deco. "
+                        "Tenés un CONTEXTO con información exacta del negocio. "
+                        "Solo podés responder usando la información del CONTEXTO, pero sé proactivo y amable. "
+                        "Si la pregunta está relacionada, aunque sea de forma general, y el CONTEXTO tiene algo útil, respondé de forma clara y servicial. "
+                        "Si el usuario pregunta algo como '¿Venden sillones?' y en el CONTEXTO hay detalles de sillones, confirmá que sí y mencioná algunos modelos. "
+                        "⚠️ Si el CONTEXTO no tiene nada relacionado, NO inventes información. "
+                        "En ese caso respondé siempre: "
+                        "'Mirá, con lo que tengo acá no te puedo confirmar eso, pero podés llamar al 011 6028‑1211 para más info. ¡Estoy para ayudarte en lo que necesites!' "
+                        "Nunca agregues datos que no estén en el CONTEXTO. "
+                        "Respondé siempre en no más de 2 líneas, en tono cálido, predispuesto y claro para WhatsApp."
                     )
                 },
                 {
