@@ -3,8 +3,6 @@ import openai
 import os
 from dotenv import load_dotenv
 import json
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 
 # === CONFIGURACIONES ===
 load_dotenv()
@@ -21,89 +19,13 @@ client = openai.OpenAI(
 
 app = Flask(__name__)
 
-# === VARIABLES PARA EMBEDDINGS ===
+# === CARGAR TODO EL CONTEXTO UNA SOLA VEZ ===
 txt_path = "lovely_taller.txt"
-document_chunks = []
-document_embeddings = []
-
-# === FUNCIONES AUXILIARES ===
-
-def extraer_texto_txt(txt_path):
-    """Lee texto directo de un archivo .txt"""
-    if not os.path.exists(txt_path):
-        print(f"❌ ERROR: No se encontró el archivo {txt_path}")
-        return ""
+if os.path.exists(txt_path):
     with open(txt_path, "r", encoding="utf-8") as f:
-        return f.read()
-
-def dividir_en_chunks(texto, max_tokens=500):
-    """Divide el texto en bloques manejables"""
-    palabras = texto.split()
-    chunks = []
-    actual = []
-    tokens = 0
-
-    for palabra in palabras:
-        actual.append(palabra)
-        tokens += 1
-        if tokens >= max_tokens:
-            chunks.append(" ".join(actual))
-            actual = []
-            tokens = 0
-    if actual:
-        chunks.append(" ".join(actual))
-    return chunks
-
-def obtener_embedding(texto):
-    """Genera el embedding de un texto"""
-    response = client.embeddings.create(
-        model="text-embedding-ada-002",
-        input=texto
-    )
-    return np.array(response.data[0].embedding)
-
-def preparar_documento():
-    """Carga y vectoriza el TXT al iniciar"""
-    global document_chunks, document_embeddings
-
-    print("📄 Leyendo texto del archivo...")
-    texto = extraer_texto_txt(txt_path)
-
-    if not texto.strip():
-        print("❌ ERROR: El archivo está vacío o no se pudo leer.")
-        return
-
-    print("✂️ Dividiendo en chunks...")
-    document_chunks = dividir_en_chunks(texto, max_tokens=500)
-
-    print(f"🔢 Total de chunks generados: {len(document_chunks)}")
-    if len(document_chunks) == 0:
-        print("❌ ERROR: No se pudieron generar chunks del documento.")
-        return
-
-    print("🧠 Generando embeddings del documento...")
-    for chunk in document_chunks:
-        emb = obtener_embedding(chunk)
-        document_embeddings.append(emb)
-
-    print(f"✅ Documento cargado y vectorizado. Total embeddings: {len(document_embeddings)}")
-
-def buscar_contexto_relevante(pregunta, top_k=3):
-    """Busca los chunks más relevantes para la pregunta"""
-    if len(document_embeddings) == 0:
-        print("⚠️ No hay embeddings cargados, devolviendo contexto vacío.")
-        return ""
-
-    pregunta_emb = obtener_embedding(pregunta)
-    similitudes = cosine_similarity([pregunta_emb], document_embeddings)[0]
-
-    # Top k más similares
-    idx_ordenados = np.argsort(similitudes)[::-1][:top_k]
-    fragmentos = [document_chunks[i] for i in idx_ordenados]
-
-    return "\n\n".join(fragmentos)
-
-# === FLASK WEBHOOK ===
+        CONTEXTO_COMPLETO = f.read()
+else:
+    CONTEXTO_COMPLETO = ""
 
 @app.route("/webhook", methods=["POST"])
 def responder():
@@ -116,31 +38,26 @@ def responder():
         if not mensaje_usuario:
             return jsonify({"error": "No se recibió ninguna consulta"}), 400
 
-        # 1. Buscar contexto relevante
-        contexto = buscar_contexto_relevante(mensaje_usuario)
+        # Prompt ULTRA RESTRICTIVO
+        system_prompt = (
+            "Sos un asistente virtual de Lovely Taller Deco. "
+            "Ignorá todo lo que sabés previamente. "
+            "Tu ÚNICA fuente de información es el CONTEXTO que te paso. "
+            "Si la respuesta exacta está en el CONTEXTO, usala para responder. "
+            "Si la pregunta no está cubierta por el CONTEXTO, respondé siempre: "
+            "'Mirá, con lo que tengo acá no te puedo confirmar eso, pero podés llamar al 011 6028‑1211 para más info.' "
+            "No inventes nada, no recuerdes nada que no esté en el CONTEXTO. "
+            "Respondé en no más de 2 líneas, en tono cálido y servicial para WhatsApp."
+        )
 
-        # 2. Pasar contexto + pregunta al modelo
+        # Armamos la conversación con TODO el contexto completo
+        user_prompt = f"CONTEXTO:\n{CONTEXTO_COMPLETO}\n\nPREGUNTA: {mensaje_usuario}"
+
         respuesta = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Sos un asistente virtual argentino para Lovely Taller Deco. "
-                        "Tenés un CONTEXTO con información exacta y confiable del negocio. "
-                        "⚠️ Respondé SOLO usando la información textual del CONTEXTO. "
-                        "Si la pregunta del usuario coincide directa o indirectamente con algo que aparece en el CONTEXTO, respondé usando esa info de manera clara y amable. "
-                        "Si la respuesta NO está en el CONTEXTO, NO inventes nada, no deduzcas ni supongas. "
-                        "En ese caso respondé SIEMPRE exactamente: "
-                        "'Mirá, con lo que tengo acá no te puedo confirmar eso, pero podés llamar al 011 6028‑1211 para más info.' "
-                        "No agregues datos nuevos ni cambies los existentes. "
-                        "Respondé siempre en no más de 2 líneas, en tono cálido y servicial para WhatsApp."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": f"CONTEXTO:\n{contexto}\n\nPREGUNTA: {mensaje_usuario}"
-                }
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
             ]
         )
 
@@ -152,5 +69,4 @@ def responder():
         return jsonify({"error": "Error interno en el servidor"}), 500
 
 if __name__ == "__main__":
-    preparar_documento()  # Cargar y vectorizar TXT al inicio
     app.run(host="0.0.0.0", port=5000)
