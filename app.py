@@ -3,7 +3,6 @@ import openai
 import os
 from dotenv import load_dotenv
 import json
-import fitz  # PyMuPDF
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -23,19 +22,19 @@ client = openai.OpenAI(
 app = Flask(__name__)
 
 # === VARIABLES PARA EMBEDDINGS ===
-pdf_path = "lovely_taller.pdf"  # El PDF estará en el mismo repo
+txt_path = "lovely_taller.txt"  # El archivo de texto estará en el mismo repo
 document_chunks = []      # Lista de textos divididos
 document_embeddings = []  # Lista de embeddings correspondientes
 
 # === FUNCIONES AUXILIARES ===
 
-def extraer_texto_pdf(pdf_path):
-    """Extrae texto plano del PDF"""
-    texto = ""
-    doc = fitz.open(pdf_path)
-    for pagina in doc:
-        texto += pagina.get_text()
-    return texto
+def extraer_texto_txt(txt_path):
+    """Lee texto directo de un archivo .txt"""
+    if not os.path.exists(txt_path):
+        print(f"❌ ERROR: No se encontró el archivo {txt_path}")
+        return ""
+    with open(txt_path, "r", encoding="utf-8") as f:
+        return f.read()
 
 def dividir_en_chunks(texto, max_tokens=500):
     """Divide el texto en bloques manejables"""
@@ -64,26 +63,37 @@ def obtener_embedding(texto):
     return np.array(response.data[0].embedding)
 
 def preparar_documento():
-    """Carga y vectoriza el PDF al iniciar"""
+    """Carga y vectoriza el TXT al iniciar"""
     global document_chunks, document_embeddings
 
-    print("📄 Extrayendo texto del PDF...")
-    texto = extraer_texto_pdf(pdf_path)
+    print("📄 Leyendo texto del archivo...")
+    texto = extraer_texto_txt(txt_path)
+
+    if not texto.strip():
+        print("❌ ERROR: El archivo está vacío o no se pudo leer.")
+        return
 
     print("✂️ Dividiendo en chunks...")
     document_chunks = dividir_en_chunks(texto, max_tokens=500)
 
-    print(f"🔢 Total de chunks: {len(document_chunks)}")
+    print(f"🔢 Total de chunks generados: {len(document_chunks)}")
+    if len(document_chunks) == 0:
+        print("❌ ERROR: No se pudieron generar chunks del documento.")
+        return
 
     print("🧠 Generando embeddings del documento...")
     for chunk in document_chunks:
         emb = obtener_embedding(chunk)
         document_embeddings.append(emb)
 
-    print("✅ Documento cargado y vectorizado.")
+    print(f"✅ Documento cargado y vectorizado. Total embeddings: {len(document_embeddings)}")
 
 def buscar_contexto_relevante(pregunta, top_k=3):
     """Busca los chunks más relevantes para la pregunta"""
+    if len(document_embeddings) == 0:
+        print("⚠️ No hay embeddings cargados, devolviendo contexto vacío.")
+        return ""
+
     pregunta_emb = obtener_embedding(pregunta)
     similitudes = cosine_similarity([pregunta_emb], document_embeddings)[0]
 
@@ -138,5 +148,5 @@ def responder():
         return jsonify({"error": "Error interno en el servidor"}), 500
 
 if __name__ == "__main__":
-    preparar_documento()  # Cargar y vectorizar PDF al inicio
+    preparar_documento()  # Cargar y vectorizar TXT al inicio
     app.run(host="0.0.0.0", port=5000)
