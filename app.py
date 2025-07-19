@@ -22,7 +22,7 @@ client = openai.OpenAI(
 app = Flask(__name__)
 
 # === VARIABLES PARA EMBEDDINGS ===
-txt_path = "lovely_taller.txt"  # El archivo de texto estará en el mismo repo
+txt_path = "lovely_taller.txt"  # Archivo de texto en el repo
 document_chunks = []      # Lista de textos divididos
 document_embeddings = []  # Lista de embeddings correspondientes
 
@@ -127,10 +127,14 @@ def responder():
                     "role": "system",
                     "content": (
                         "Sos un asistente virtual argentino, hablás en tono rioplatense, cercano y natural. "
-                        "Respondé únicamente en base al CONTEXTO que te paso. "
-                        "Si la información no está en el contexto, decí: "
+                        "Tenés el siguiente CONTEXTO con información de Lovely Taller Deco. "
+                        "Si la pregunta del usuario está relacionada con algo que aparece aunque sea indirectamente en el contexto, "
+                        "respondé usando esa info. "
+                        "Si el usuario pregunta algo general como 'venden sillones?' y ves que en el contexto hay detalles de sillones, "
+                        "contestá que sí y nombrá algunos ejemplos. "
+                        "Solo si realmente NO hay nada relacionado en el contexto, respondé: "
                         "'Mirá, con lo que tengo acá no te puedo confirmar eso, pero podés llamar al 011 6028‑1211 para más info.' "
-                        "No inventes nada. Sé amable, breve (máximo 2 líneas) y claro para responder por WhatsApp."
+                        "Siempre respondé en no más de 2 líneas, en tono amable y claro para WhatsApp."
                     )
                 },
                 {
