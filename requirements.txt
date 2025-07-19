@@ -1,0 +1,7 @@
+flask
+python-dotenv
+openai>=1.0.0
+PyMuPDF
+scikit-learn
+numpy
+gunicorn
