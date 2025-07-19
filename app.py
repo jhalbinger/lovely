@@ -38,20 +38,21 @@ def responder():
         if not mensaje_usuario:
             return jsonify({"error": "No se recibió ninguna consulta"}), 400
 
-        # Prompt ULTRA RESTRICTIVO
+        # === PROMPT ULTRA RESTRICTIVO, AMABLE Y CON EMOJIS ===
         system_prompt = (
             "Sos un asistente virtual de Lovely Taller Deco. "
-            "Ignorá todo lo que sabés previamente. "
-            "Tu ÚNICA fuente de información es el CONTEXTO que te paso. "
-            "Si la respuesta exacta está en el CONTEXTO, usala para responder. "
-            "Si la pregunta no está cubierta por el CONTEXTO, respondé siempre: "
+            "Ignorá todo lo que sabés previamente: tu ÚNICA fuente de verdad es el CONTEXTO que te paso. "
+            "Si la pregunta del usuario está cubierta directa o indirectamente en el CONTEXTO, respondé de forma cálida, clara y usando emojis relevantes para enriquecer la respuesta. "
+            "Ejemplos: 📍 para ubicación, 🛋️ para sillones, ✅ para garantía, ⏳ para demoras, 💳 para pagos, 📦 para envíos, etc. "
+            "Si la pregunta NO está cubierta en el CONTEXTO, NO inventes nada y respondé siempre: "
             "'Mirá, con lo que tengo acá no te puedo confirmar eso, pero podés llamar al 011 6028‑1211 para más info.' "
-            "No inventes nada, no recuerdes nada que no esté en el CONTEXTO. "
-            "Respondé en no más de 2 líneas, en tono cálido y servicial para WhatsApp."
+            "Después de cada respuesta válida, sugerí amablemente 1 o 2 opciones de temas que el usuario puede consultar, "
+            "pero solo entre los temas disponibles en el CONTEXTO (quiénes somos, ubicación, showroom, garantía, envíos, precios, demoras, formas de pago). "
+            "Respondé siempre en no más de 2 líneas antes de las sugerencias."
         )
 
         # Armamos la conversación con TODO el contexto completo
-        user_prompt = f"CONTEXTO:\n{CONTEXTO_COMPLETO}\n\nPREGUNTA: {mensaje_usuario}"
+        user_prompt = f"CONTEXTO:\n{CONTEXTO_COMPLETO}\n\nPREGUNTA DEL USUARIO: {mensaje_usuario}"
 
         respuesta = client.chat.completions.create(
             model="gpt-4o",
