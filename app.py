@@ -27,6 +27,13 @@ if os.path.exists(txt_path):
 else:
     CONTEXTO_COMPLETO = ""
 
+# Memoria simple: última sugerencia enviada
+ultima_sugerencia = {}
+
+def es_respuesta_corta(texto):
+    texto = texto.lower().strip()
+    return texto in ["sí", "dale", "contame", "ok", "claro", "obvio", "sí por favor", "por favor"]
+
 @app.route("/webhook", methods=["POST"])
 def responder():
     try:
@@ -35,23 +42,30 @@ def responder():
         print(json.dumps(datos, indent=2))
 
         mensaje_usuario = datos.get("consulta", "")
+        user_id = datos.get("user_id", "anon")  # Podés pasar un ID de usuario en el JSON para diferenciar sesiones
         if not mensaje_usuario:
             return jsonify({"error": "No se recibió ninguna consulta"}), 400
 
-        # === PROMPT ULTRA RESTRICTIVO, AMABLE Y CON EMOJIS ===
+        global ultima_sugerencia
+
+        # Si el usuario responde "sí" o algo corto, retomamos última sugerencia
+        if es_respuesta_corta(mensaje_usuario) and user_id in ultima_sugerencia:
+            mensaje_usuario = ultima_sugerencia[user_id]
+
+        # === PROMPT ULTRA RESTRICTIVO PERO AMIGABLE Y CON EMOJIS ===
         system_prompt = (
             "Sos un asistente virtual de Lovely Taller Deco. "
             "Ignorá todo lo que sabés previamente: tu ÚNICA fuente de verdad es el CONTEXTO que te paso. "
-            "Si la pregunta del usuario está cubierta directa o indirectamente en el CONTEXTO, respondé de forma cálida, clara y usando emojis relevantes para enriquecer la respuesta. "
-            "Ejemplos: 📍 para ubicación, 🛋️ para sillones, ✅ para garantía, ⏳ para demoras, 💳 para pagos, 📦 para envíos, etc. "
+            "Si la pregunta del usuario está cubierta directa o indirectamente en el CONTEXTO, respondé de forma cálida, clara y usando emojis relevantes. "
+            "Ejemplos: 📍 ubicación, 🛋️ sillones, ✅ garantía, ⏳ demoras, 💳 pagos, 📦 envíos. "
             "Si la pregunta NO está cubierta en el CONTEXTO, NO inventes nada y respondé siempre: "
             "'Mirá, con lo que tengo acá no te puedo confirmar eso, pero podés llamar al 011 6028‑1211 para más info.' "
-            "Después de cada respuesta válida, sugerí amablemente 1 o 2 opciones de temas que el usuario puede consultar, "
-            "pero solo entre los temas disponibles en el CONTEXTO (quiénes somos, ubicación, showroom, garantía, envíos, precios, demoras, formas de pago). "
-            "Respondé siempre en no más de 2 líneas antes de las sugerencias."
+            "Después de cada respuesta válida, sugerí 1 o 2 temas del CONTEXTO para continuar la charla "
+            "(quiénes somos, showroom, garantía, envíos, precios, demoras, formas de pago). "
+            "Respondé en no más de 2 líneas antes de las sugerencias."
         )
 
-        # Armamos la conversación con TODO el contexto completo
+        # Construimos la conversación con TODO el contexto
         user_prompt = f"CONTEXTO:\n{CONTEXTO_COMPLETO}\n\nPREGUNTA DEL USUARIO: {mensaje_usuario}"
 
         respuesta = client.chat.completions.create(
@@ -63,6 +77,20 @@ def responder():
         )
 
         respuesta_llm = respuesta.choices[0].message.content.strip()
+
+        # Guardamos la última sugerencia detectada
+        # Si la respuesta tiene "¿Querés" o "¿Te cuento", lo tomamos como próxima sugerencia
+        sugerencia_detectada = None
+        for linea in respuesta_llm.split("\n"):
+            if "¿" in linea:
+                sugerencia_detectada = linea.replace("¿", "").replace("?", "").strip()
+                break
+
+        if sugerencia_detectada:
+            ultima_sugerencia[user_id] = sugerencia_detectada
+        else:
+            ultima_sugerencia.pop(user_id, None)
+
         return jsonify({"respuesta": respuesta_llm})
 
     except Exception as e:
