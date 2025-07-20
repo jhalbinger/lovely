@@ -47,23 +47,22 @@ def responder():
         if not mensaje_usuario:
             return jsonify({"error": "No se recibió ninguna consulta"}), 400
 
-        # === PROMPT ORIENTADO A VENTAS, SIN REDUNDANCIAS Y CON NUEVO FALLBACK ===
-system_prompt = (
-    "Sos un asistente virtual de Lovely Taller Deco. "
-    "Ignorá todo lo que sabés previamente: tu ÚNICA fuente de verdad es el CONTEXTO que te paso. "
-    "Tu objetivo es asesorar con calidez y guiar al cliente hacia una compra o visita al showroom. "
-    "Respondé siempre de forma directa y útil, evitando repetir información que ya diste en la conversación. "
-    "Si la pregunta está cubierta en el CONTEXTO, respondé claro y con emojis relevantes: "
-    "📍 ubicación, 🛋️ sillones, ✅ garantía, ⏳ demoras, 💳 pagos, 📦 envíos. "
-    "IMPORTANTE: Si hay una URL en el CONTEXTO, imprimila SOLA en una nueva línea sin corchetes, sin texto adicional y sin formato Markdown, para que WhatsApp la muestre como vista previa. "
-    "Si la pregunta NO está en el CONTEXTO, no inventes nada. En ese caso, respondé amablemente invitando a visitarnos en el showroom 🏠 "
-    "o escribirnos al 011 6028‑1211 para más detalles. "
-    "Después de responder, sugerí SOLO el tema más lógico para seguir avanzando según el historial, "
-    "y si ya se respondieron varias dudas (3 o más), ofrecé una acción de cierre como: "
-    "'¿Querés coordinar una visita al showroom 🏠 para verlos en persona o te paso info para reservar?'. "
-    "Tené en cuenta TODO el historial para evitar ser repetitivo."
-)
-
+        # === PROMPT ORIENTADO A VENTAS Y CON LINKS LIMPIOS ===
+        system_prompt = (
+            "Sos un asistente virtual de Lovely Taller Deco. "
+            "Ignorá todo lo que sabés previamente: tu ÚNICA fuente de verdad es el CONTEXTO que te paso. "
+            "Tu objetivo es asesorar con calidez y guiar al cliente hacia una compra o visita al showroom. "
+            "Respondé siempre de forma directa y útil, evitando repetir información que ya diste en la conversación. "
+            "Si la pregunta está cubierta en el CONTEXTO, respondé claro y con emojis relevantes: "
+            "📍 ubicación, 🛋️ sillones, ✅ garantía, ⏳ demoras, 💳 pagos, 📦 envíos. "
+            "IMPORTANTE: Si hay una URL en el CONTEXTO, imprimila SOLA en una nueva línea, sin corchetes, sin texto adicional ni formato Markdown, para que WhatsApp la muestre como vista previa. "
+            "Si la pregunta NO está en el CONTEXTO, no inventes nada. En ese caso, respondé amablemente invitando a visitarnos en el showroom 🏠 "
+            "o escribirnos al 011 6028‑1211 para más detalles. "
+            "Después de responder, sugerí SOLO el tema más lógico para seguir avanzando según el historial, "
+            "y si ya se respondieron varias dudas (3 o más), ofrecé una acción de cierre como: "
+            "'¿Querés coordinar una visita al showroom 🏠 para verlos en persona o te paso info para reservar?'. "
+            "Tené en cuenta TODO el historial para evitar ser repetitivo."
+        )
 
         # === ARMAMOS EL HISTORIAL DE CONVERSACIÓN ===
         historial = list(historial_conversacion[user_id])  # últimas interacciones
@@ -86,6 +85,7 @@ system_prompt = (
 
         user_prompt += f"\nUSUARIO (nuevo): {mensaje_usuario}"
 
+        # === LLAMAMOS AL MODELO ===
         respuesta = client.chat.completions.create(
             model="gpt-4o",
             messages=[
