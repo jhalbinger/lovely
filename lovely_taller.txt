@@ -13,6 +13,7 @@ Podés consultarme sobre:
 - La garantía de los productos.
 - Los horarios de showroom.
 - Características de cada modelo.
+- Ver imágenes de productos.
 
 [UBICACIÓN]
 Julio Argentino Roca 2523, Vicente López, Buenos Aires.
@@ -49,12 +50,17 @@ Ejemplos:
 - Puff Cuadrado y Puff Gigante también disponibles.
 
 [SILLONES]
-- Bella: 1,30×0,85×0,75m – $465.000  
-- Nube: $768.000  
+- Bella: 1,30×0,85×0,75m – $465.000
+
+- Nube: $768.000
+
 - Roma: $746.000  
-imagen: https://acdn-us.mitiendanube.com/stores/002/032/922/products/whatsapp-image-2024-10-22-at-14-25-30-559ac1dd0d1f26ccb917296183717434-320-0.webp
-- Lady: $385.000  
-- Chester: precio según catálogo, misma garantía.  
+https://acdn-us.mitiendanube.com/stores/002/032/922/products/whatsapp-image-2024-10-22-at-14-25-30-559ac1dd0d1f26ccb917296183717434-320-0.webp
+
+- Lady: $385.000
+
+- Chester: precio según catálogo, misma garantía.
+
 Características comunes: estructura saligna, vellón siliconado, telas anti-manchas.
 
 [ESQUINEROS]
@@ -80,3 +86,7 @@ Respaldos desde $104.000. Ejemplo “Envidiosa”.
 - Pétalo Doble 1,30 m: $341.000  
 - Pétalo Doble 1,60 m: $409.000  
 - Otros modelos: Flux $123.000, Renata $142.000, Clásicas $70.000, Anabel $124.000.
+
+[GALERÍA DE PRODUCTOS]
+Podés ver todas las fotos y modelos en nuestra web:  
+https://www.lovelytaller.com.ar/productos/
