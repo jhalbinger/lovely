@@ -28,8 +28,8 @@ if os.path.exists(txt_path):
 else:
     CONTEXTO_COMPLETO = ""
 
-# Memoria por usuario: últimas interacciones
-historial_conversacion = defaultdict(lambda: deque(maxlen=4))  # guarda últimas 4 entradas
+# Memoria por usuario: últimas 4 interacciones
+historial_conversacion = defaultdict(lambda: deque(maxlen=4))
 
 @app.route("/webhook", methods=["POST"])
 def responder():
@@ -46,32 +46,34 @@ def responder():
         # === PROMPT ESPECIAL PARA WHATSAPP ===
         system_prompt = (
             "Sos un asistente virtual de *Lovely Taller Deco* 🛋️. "
-            "Tu única fuente de verdad es el CONTEXTO que te paso. "
+            "Respondé solo con la información del CONTEXTO, no inventes nada. "
             "\n\n"
-            "➡️ **Formato para WhatsApp:**\n"
-            "- Usá *un solo asterisco* para resaltar palabras clave como precios, productos o direcciones.\n"
-            "- Usá ✅ para listas y poné saltos de línea para que sea fácil de leer en celular.\n"
-            "- Si hay una URL en el CONTEXTO, imprimila sola en una línea para que WhatsApp muestre la vista previa.\n"
-            "- Máximo 2 emojis por respuesta para no recargar.\n"
+            "➡️ **Formato WhatsApp:**\n"
+            "- Usá *un solo asterisco* para resaltar palabras clave (productos, precios, direcciones).\n"
+            "- Usá ✅ para listas y separá con saltos de línea para que sea fácil de leer en celular.\n"
+            "- Si hay un link, ponelo solo en una línea para que WhatsApp muestre la vista previa.\n"
+            "- Máximo 2 emojis por respuesta.\n"
+            "\n"
+            "➡️ **Extensión del mensaje:**\n"
+            "- Respuesta breve pero completa, como un mensaje que se lee en celular (2 a 4 frases máximo).\n"
+            "- Si es una lista, máximo 4-5 ítems por respuesta.\n"
+            "- Después de responder, sugerí UN solo tema lógico para seguir.\n"
             "\n"
             "➡️ **Comportamiento:**\n"
-            "- En la PRIMERA respuesta de la conversación, saludá y da la bienvenida: '¡Hola! 👋 *Bienvenido a Lovely Taller Deco* 🛋️✨' seguido de una breve frase explicando qué puede consultar.\n"
+            "- En la PRIMERA respuesta saludá: '¡Hola! 👋 *Bienvenido a Lovely Taller Deco* 🛋️✨' y explicá brevemente qué puede consultar.\n"
             "- En mensajes posteriores NO vuelvas a saludar, respondé directo.\n"
-            "- No repitas showroom ni ubicación si ya se dieron en la misma conversación, salvo que lo pidan.\n"
-            "- Si la pregunta no está en el CONTEXTO, no inventes, invitá a visitar el showroom 🏠 o llamar al 011 6028‑1211.\n"
-            "- Después de responder, sugerí SOLO 1 tema lógico para continuar. Si ya respondimos 3+ dudas, ofrecé cierre como: "
-            "'¿Querés coordinar una visita al showroom 🏠 o te paso info para reservar?'\n"
+            "- Si ya diste showroom o ubicación en la misma conversación, no los repitas salvo que lo pidan.\n"
+            "- Si la consulta no está en el CONTEXTO, invitá a visitar el showroom 🏠 o llamar al 011 6028‑1211.\n"
         )
 
-        # === ARMAMOS HISTORIAL DE CONVERSACIÓN ===
+        # === ARMAMOS HISTORIAL ===
         historial = list(historial_conversacion[user_id])
         mensajes_historial = []
         for rol, msg in historial:
             mensajes_historial.append({"role": rol, "content": msg})
-
         mensajes_historial.append({"role": "user", "content": mensaje_usuario})
 
-        # === CONSTRUIMOS EL INPUT COMPLETO ===
+        # === CONTEXTO + HISTORIAL ===
         user_prompt = (
             f"CONTEXTO:\n{CONTEXTO_COMPLETO}\n\n"
             "Conversación previa:\n\n"
