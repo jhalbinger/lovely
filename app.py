@@ -29,7 +29,7 @@ else:
     CONTEXTO_COMPLETO = ""
 
 # Memoria por usuario: últimas interacciones
-historial_conversacion = defaultdict(lambda: deque(maxlen=4))  # últimos 4 mensajes
+historial_conversacion = defaultdict(lambda: deque(maxlen=4))  # guarda últimas 4 entradas
 
 @app.route("/webhook", methods=["POST"])
 def responder():
@@ -43,35 +43,35 @@ def responder():
         if not mensaje_usuario:
             return jsonify({"error": "No se recibió ninguna consulta"}), 400
 
-        # === PROMPT MEJORADO PARA FORMATO WHATSAPP ===
+        # === PROMPT ESPECIAL PARA WHATSAPP ===
         system_prompt = (
-            "Sos un asistente virtual de Lovely Taller Deco 🛋️. "
-            "Respondé SOLO con el CONTEXTO que te paso, nunca inventes datos. "
+            "Sos un asistente virtual de *Lovely Taller Deco* 🛋️. "
+            "Tu única fuente de verdad es el CONTEXTO que te paso. "
             "\n\n"
             "➡️ **Formato para WhatsApp:**\n"
-            "- Usá DOBLE ASTERISCO para resaltar palabras clave (**texto**).\n"
-            "- Usá ✅ y otros emojis para listar elementos importantes.\n"
-            "- Agregá saltos de línea entre secciones para que no quede bloque.\n"
-            "- Si hay un link en el CONTEXTO, ponelo SOLO en una línea aparte para que WhatsApp lo muestre como preview.\n"
-            "- Máximo 2 emojis por respuesta.\n"
+            "- Usá *un solo asterisco* para resaltar palabras clave como precios, productos o direcciones.\n"
+            "- Usá ✅ para listas y poné saltos de línea para que sea fácil de leer en celular.\n"
+            "- Si hay una URL en el CONTEXTO, imprimila sola en una línea para que WhatsApp muestre la vista previa.\n"
+            "- Máximo 2 emojis por respuesta para no recargar.\n"
             "\n"
-            "➡️ **Comportamiento inteligente:**\n"
-            "- Saludá SOLO en el primer mensaje de la conversación.\n"
-            "- Si ya hubo varias respuestas, no repitas showroom ni ubicación salvo que lo pidan.\n"
-            "- Si la consulta no está en el CONTEXTO, invitá a visitar el showroom 🏠 o llamar al 011 6028‑1211.\n"
-            "- Después de responder, sugerí UN solo tema lógico para continuar.\n"
-            "- Si ya respondimos 3+ dudas, ofrecé cierre como: "
+            "➡️ **Comportamiento:**\n"
+            "- En la PRIMERA respuesta de la conversación, saludá y da la bienvenida: '¡Hola! 👋 *Bienvenido a Lovely Taller Deco* 🛋️✨' seguido de una breve frase explicando qué puede consultar.\n"
+            "- En mensajes posteriores NO vuelvas a saludar, respondé directo.\n"
+            "- No repitas showroom ni ubicación si ya se dieron en la misma conversación, salvo que lo pidan.\n"
+            "- Si la pregunta no está en el CONTEXTO, no inventes, invitá a visitar el showroom 🏠 o llamar al 011 6028‑1211.\n"
+            "- Después de responder, sugerí SOLO 1 tema lógico para continuar. Si ya respondimos 3+ dudas, ofrecé cierre como: "
             "'¿Querés coordinar una visita al showroom 🏠 o te paso info para reservar?'\n"
         )
 
-        # === ARMAMOS HISTORIAL ===
+        # === ARMAMOS HISTORIAL DE CONVERSACIÓN ===
         historial = list(historial_conversacion[user_id])
         mensajes_historial = []
         for rol, msg in historial:
             mensajes_historial.append({"role": rol, "content": msg})
+
         mensajes_historial.append({"role": "user", "content": mensaje_usuario})
 
-        # === CONTEXTO + HISTORIAL ===
+        # === CONSTRUIMOS EL INPUT COMPLETO ===
         user_prompt = (
             f"CONTEXTO:\n{CONTEXTO_COMPLETO}\n\n"
             "Conversación previa:\n\n"
@@ -80,7 +80,7 @@ def responder():
             user_prompt += f"{rol.upper()}: {msg}\n"
         user_prompt += f"\nUSUARIO (nuevo): {mensaje_usuario}"
 
-        # === LLAMAMOS AL MODELO ===
+        # === LLAMADA AL MODELO ===
         respuesta = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -99,7 +99,7 @@ def responder():
 
     except Exception as e:
         print("💥 Error detectado:", e)
-        return jsonify({"respuesta": "Estoy tardando en procesar tu consulta, podés intentar de nuevo en unos segundos 🙏"}), 200
+        return jsonify({"respuesta": "Estoy tardando en procesar tu consulta, intentá de nuevo en unos segundos 🙏"}), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
