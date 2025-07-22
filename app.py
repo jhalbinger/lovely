@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 import json
 from collections import defaultdict, deque
-import requests  # Necesario para llamar al microservicio de derivación
+import requests
 
 # === CONFIGURACIONES ===
 load_dotenv()
@@ -29,11 +29,13 @@ if os.path.exists(txt_path):
 else:
     CONTEXTO_COMPLETO = ""
 
-# Memoria por usuario: últimas 4 interacciones
+# Memoria por usuario: últimas 4 interacciones para GPT
 historial_conversacion = defaultdict(lambda: deque(maxlen=4))
 
-# Diccionario para marcar usuarios que esperan confirmación de contacto humano
-esperando_confirmacion = {}
+# Estado de cada usuario: puede ser "esperando_confirmacion" o "derivado"
+estado_usuario = {}
+# Último producto consultado por usuario
+producto_usuario = {}
 
 @app.route("/webhook", methods=["POST"])
 def responder():
@@ -43,25 +45,36 @@ def responder():
         print(json.dumps(datos, indent=2))
 
         mensaje_usuario = datos.get("consulta", "")
-        user_id = datos.get("user_id", "anon")
+        user_id = datos.get("user_id", "anon").strip()
+
         if not mensaje_usuario:
             return jsonify({"error": "No se recibió ninguna consulta"}), 400
 
-        # === Si este usuario está en modo confirmación de derivación ===
-        if esperando_confirmacion.get(user_id):
-            if mensaje_usuario.lower() in ["sí", "si", "dale", "ok", "quiero", "confirmo"]:
-                # ✅ Derivar la consulta al microservicio
-                try:
-                    # Tomamos la última consulta relevante del historial (antes de la confirmación)
-                    ultima_consulta = historial_conversacion[user_id][-2][1] if len(historial_conversacion[user_id]) >= 2 else mensaje_usuario
+        # === Si ya fue derivado en esta sesión, no derivar de nuevo ===
+        if estado_usuario.get(user_id) == "derivado":
+            return responder_normal(mensaje_usuario, user_id)
 
+        # === Si está esperando confirmación de derivación ===
+        if estado_usuario.get(user_id) == "esperando_confirmacion":
+            if mensaje_usuario.lower() in ["sí", "si", "dale", "ok", "quiero", "confirmo"]:
+                # ✅ Derivar solo una vez por sesión
+                estado_usuario[user_id] = "derivado"
+
+                # Producto consultado
+                producto = producto_usuario.get(user_id, "No especificado")
+
+                mensaje_para_dueño = (
+                    f"📩 Usuario {user_id} pidió hablar con un asesor.\n"
+                    f"🛋️ Producto consultado: {producto}"
+                )
+
+                try:
                     resp = requests.post(
                         "https://derivacion-humano.onrender.com/derivar-humano",
-                        json={"numero": user_id, "consulta": ultima_consulta}
+                        json={"numero": user_id, "consulta": mensaje_para_dueño}
                     )
-
                     if resp.status_code == 200:
-                        respuesta_llm = "✅ Perfecto, ya avisé a un asesor para que te contacte en breve."
+                        respuesta_llm = "✅ Listo, ya avisé a un asesor para que te contacte. Mientras tanto, cualquier consulta seguí escribiéndome por acá que sigo a disposición 😉"
                     else:
                         print("❌ Error Twilio:", resp.text)
                         respuesta_llm = "❌ Intenté derivarte, pero hubo un problema. Podés llamar al 011 6028‑1211 para coordinar directo."
@@ -69,92 +82,107 @@ def responder():
                     print("❌ Error al derivar:", e)
                     respuesta_llm = "❌ No pude avisar al asesor en este momento. Podés llamar al 011 6028‑1211 para coordinar directo."
 
-                # Ya no está esperando confirmación
-                esperando_confirmacion.pop(user_id, None)
                 return jsonify({"respuesta": respuesta_llm})
+
             else:
-                # Si dice "no" o algo distinto, cancelar derivación
-                esperando_confirmacion.pop(user_id, None)
+                # Si dice "no" o algo distinto, cancela derivación
+                estado_usuario.pop(user_id, None)
                 return jsonify({"respuesta": "👌 Sin problema, cualquier cosa podés consultarme por acá cuando quieras."})
 
-        # === Detectar intención de compra en el mensaje ===
-        palabras_interes = ["comprar", "coordinar", "quiero", "reservar", "me interesa", "cómo pago", "precio final"]
-        if any(palabra in mensaje_usuario.lower() for palabra in palabras_interes):
-            # Guardamos la intención en historial
-            historial_conversacion[user_id].append(("user", mensaje_usuario))
+        # === Intentamos detectar si menciona un producto en esta consulta ===
+        prod_detectado = detectar_producto_mencionado(mensaje_usuario)
+        if prod_detectado:
+            producto_usuario[user_id] = prod_detectado
 
-            # Respondemos normal pero agregamos la oferta de contacto humano
-            respuesta_llm = (
-                "Podés comprar este producto con *hasta 12 cuotas sin interés* y demora de entrega de 35-45 días hábiles.\n\n"
-                "✅ *¿Querés que un asesor te contacte para coordinar la compra?* Respondé *Sí* para derivarte."
-            )
+        # === Flujo normal con GPT ===
+        respuesta_normal = responder_normal(mensaje_usuario, user_id)
 
-            # Marcamos que este usuario está esperando confirmación
-            esperando_confirmacion[user_id] = True
+        # Contamos cuántas consultas ha hecho este usuario
+        consultas_usuario = [msg for rol, msg in historial_conversacion[user_id] if rol == "user"]
+        cantidad_consultas = len(consultas_usuario)
 
-            return jsonify({"respuesta": respuesta_llm})
+        # Si ya hizo al menos 3 consultas, después de responder le ofrecemos derivación
+        if cantidad_consultas >= 3 and estado_usuario.get(user_id) != "derivado":
+            estado_usuario[user_id] = "esperando_confirmacion"
+            extra = "\n\n✅ *Si querés, puedo pedir que un asesor te contacte para coordinar la compra. ¿Querés que te llame?*"
+            respuesta_data = json.loads(respuesta_normal.get_data())
+            respuesta_data["respuesta"] += extra
+            return jsonify(respuesta_data)
 
-        # === Si no es intención de compra, flujo normal con OpenAI ===
-        # === PROMPT ESPECIAL PARA WHATSAPP ===
-        system_prompt = (
-            "Sos un asistente virtual de *Lovely Taller Deco* 🛋️. "
-            "Respondé solo con la información del CONTEXTO, no inventes nada. "
-            "\n\n"
-            "➡️ **Formato WhatsApp:**\n"
-            "- Usá *un solo asterisco* para resaltar palabras clave (productos, precios, direcciones).\n"
-            "- Usá ✅ para listas y agregá SALTOS DE LÍNEA entre frases para que el mensaje no quede en un solo bloque.\n"
-            "- Cada 1 o 2 frases, cortá y poné un salto de línea.\n"
-            "- Si hay un link, ponelo solo en una línea para que WhatsApp muestre la vista previa.\n"
-            "- Máximo 2 emojis por respuesta.\n"
-            "\n"
-            "➡️ **Extensión del mensaje:**\n"
-            "- Respuesta breve pero completa, ideal para leer en celular (máximo 4-5 líneas de texto).\n"
-            "- Si es una lista, máximo 4-5 ítems por respuesta.\n"
-            "- Después de responder, sugerí UN solo tema lógico para seguir.\n"
-            "\n"
-            "➡️ **Comportamiento:**\n"
-            "- En la PRIMERA respuesta saludá: '¡Hola! 👋 *Bienvenido a Lovely Taller Deco* 🛋️✨' y explicá brevemente qué puede consultar.\n"
-            "- En mensajes posteriores NO vuelvas a saludar, respondé directo.\n"
-            "- Si ya diste showroom o ubicación en la misma conversación, no los repitas salvo que lo pidan.\n"
-            "- Si la consulta no está en el CONTEXTO, no inventes; invitá a visitar el showroom 🏠 o llamar al 011 6028‑1211.\n"
-        )
-
-        # === ARMAMOS HISTORIAL ===
-        historial = list(historial_conversacion[user_id])
-        mensajes_historial = []
-        for rol, msg in historial:
-            mensajes_historial.append({"role": rol, "content": msg})
-        mensajes_historial.append({"role": "user", "content": mensaje_usuario})
-
-        # === CONTEXTO + HISTORIAL ===
-        user_prompt = (
-            f"CONTEXTO:\n{CONTEXTO_COMPLETO}\n\n"
-            "Conversación previa:\n\n"
-        )
-        for rol, msg in historial:
-            user_prompt += f"{rol.upper()}: {msg}\n"
-        user_prompt += f"\nUSUARIO (nuevo): {mensaje_usuario}"
-
-        # === LLAMADA AL MODELO ===
-        respuesta = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
-        )
-
-        respuesta_llm = respuesta.choices[0].message.content.strip()
-
-        # === GUARDAMOS EN HISTORIAL ===
-        historial_conversacion[user_id].append(("user", mensaje_usuario))
-        historial_conversacion[user_id].append(("bot", respuesta_llm))
-
-        return jsonify({"respuesta": respuesta_llm})
+        return respuesta_normal
 
     except Exception as e:
         print("💥 Error detectado:", e)
         return jsonify({"respuesta": "Estoy tardando en procesar tu consulta, intentá de nuevo en unos segundos 🙏"}), 200
+
+
+def responder_normal(mensaje_usuario, user_id):
+    """Flujo original de GPT para respuestas normales"""
+    # PROMPT ESPECIAL PARA WHATSAPP
+    system_prompt = (
+        "Sos un asistente virtual de *Lovely Taller Deco* 🛋️. "
+        "Respondé solo con la información del CONTEXTO, no inventes nada. "
+        "\n\n"
+        "➡️ **Formato WhatsApp:**\n"
+        "- Usá *un solo asterisco* para resaltar palabras clave (productos, precios, direcciones).\n"
+        "- Usá ✅ para listas y agregá SALTOS DE LÍNEA entre frases para que el mensaje no quede en un solo bloque.\n"
+        "- Cada 1 o 2 frases, cortá y poné un salto de línea.\n"
+        "- Si hay un link, ponelo solo en una línea para que WhatsApp muestre la vista previa.\n"
+        "- Máximo 2 emojis por respuesta.\n"
+        "\n"
+        "➡️ **Extensión del mensaje:**\n"
+        "- Respuesta breve pero completa, ideal para leer en celular (máximo 4-5 líneas de texto).\n"
+        "- Si es una lista, máximo 4-5 ítems por respuesta.\n"
+        "- Después de responder, sugerí UN solo tema lógico para seguir.\n"
+        "\n"
+        "➡️ **Comportamiento:**\n"
+        "- En la PRIMERA respuesta saludá: '¡Hola! 👋 *Bienvenido a Lovely Taller Deco* 🛋️✨' y explicá brevemente qué puede consultar.\n"
+        "- En mensajes posteriores NO vuelvas a saludar, respondé directo.\n"
+        "- Si ya diste showroom o ubicación en la misma conversación, no los repitas salvo que lo pidan.\n"
+        "- Si la consulta no está en el CONTEXTO, no inventes; invitá a visitar el showroom 🏠 o llamar al 011 6028‑1211.\n"
+    )
+
+    # Historial para GPT
+    historial = list(historial_conversacion[user_id])
+    mensajes_historial = [{"role": rol, "content": msg} for rol, msg in historial]
+    mensajes_historial.append({"role": "user", "content": mensaje_usuario})
+
+    # CONTEXTO + HISTORIAL
+    user_prompt = f"CONTEXTO:\n{CONTEXTO_COMPLETO}\n\nConversación previa:\n\n"
+    for rol, msg in historial:
+        user_prompt += f"{rol.upper()}: {msg}\n"
+    user_prompt += f"\nUSUARIO (nuevo): {mensaje_usuario}"
+
+    respuesta = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+    )
+
+    respuesta_llm = respuesta.choices[0].message.content.strip()
+
+    # Guardamos historial
+    historial_conversacion[user_id].append(("user", mensaje_usuario))
+    historial_conversacion[user_id].append(("bot", respuesta_llm))
+
+    return jsonify({"respuesta": respuesta_llm})
+
+
+def detectar_producto_mencionado(texto):
+    """Busca si el mensaje menciona un producto específico del contexto"""
+    productos = [
+        "sillón nube", "sillón roma", "sillón bella", "sillón lady",
+        "puff", "esquinero", "mecedora", "respaldo", "silla pétalo",
+        "queen", "estrella", "victoria", "brooklyn", "astor", "diva"
+    ]
+    texto_lower = texto.lower()
+    for p in productos:
+        if p in texto_lower:
+            return p.title()
+    return None
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
