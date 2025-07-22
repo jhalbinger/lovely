@@ -50,7 +50,11 @@ def responder():
         print(json.dumps(datos, indent=2))
 
         mensaje_usuario = datos.get("consulta", "").lower().strip()
-        user_id = datos.get("user_id", "anon").strip()
+
+        # ✅ Usamos el número real del remitente
+        # Twilio normalmente manda en datos["from"] algo como "whatsapp:+54911..."
+        from_number = datos.get("from") or datos.get("user_id") or "anon"
+        user_id = from_number.replace("whatsapp:", "")  # ejemplo: +54911xxxxxxx
 
         if not mensaje_usuario:
             return jsonify({"error": "No se recibió ninguna consulta"}), 400
@@ -161,20 +165,7 @@ def forzar_derivacion(user_id):
         f"📩 Usuario {user_id} pidió hablar con un asesor.\n"
         f"🛋️ Producto consultado: {producto}"
     )
-    try:
-        resp = requests.post(
-            "https://derivacion-humano.onrender.com/derivar-humano",
-            json={"numero": user_id, "consulta": mensaje_para_dueño}
-        )
-        if resp.status_code == 200:
-            estado_usuario[user_id] = "derivado"
-            return jsonify({"respuesta": "✅ Te paso con un asesor, ya le avisé. Mientras tanto, seguí escribiéndome si necesitás más info 😉"})
-        else:
-            print("❌ Error Twilio:", resp.text)
-            return jsonify({"respuesta": "❌ Intenté derivarte, pero hubo un problema. Podés llamar al 011 6028‑1211 para coordinar directo."})
-    except Exception as e:
-        print("❌ Error al derivar:", e)
-        return jsonify({"respuesta": "❌ No pude avisar al asesor en este momento. Podés llamar al 011 6028‑1211 para coordinar directo."})
+    return enviar_derivacion(user_id, mensaje_para_dueño)
 
 
 def derivar_asesor(user_id):
@@ -182,22 +173,34 @@ def derivar_asesor(user_id):
     estado_usuario[user_id] = "derivado"
     producto = producto_usuario.get(user_id, "No especificado")
     mensaje_para_dueño = (
-        f"📩 Usuario {user_id} pidió hablar con un asesor.\n"
+        f"📩 Usuario {user_id} aceptó ser contactado por un asesor.\n"
         f"🛋️ Producto consultado: {producto}"
     )
+    return enviar_derivacion(user_id, mensaje_para_dueño)
+
+
+def enviar_derivacion(user_id, mensaje_para_dueño):
+    """Envía la notificación al dueño con número + producto"""
     try:
         resp = requests.post(
             "https://derivacion-humano.onrender.com/derivar-humano",
             json={"numero": user_id, "consulta": mensaje_para_dueño}
         )
         if resp.status_code == 200:
-            return jsonify({"respuesta": "✅ Listo, ya avisé a un asesor para que te contacte. Mientras tanto, cualquier consulta seguí escribiéndome por acá que sigo a disposición 😉"})
+            estado_usuario[user_id] = "derivado"
+            return jsonify({
+                "respuesta": "✅ Listo, ya avisé a un asesor para que te contacte. Mientras tanto, cualquier consulta seguí escribiéndome por acá que sigo a disposición 😉"
+            })
         else:
             print("❌ Error Twilio:", resp.text)
-            return jsonify({"respuesta": "❌ Intenté derivarte, pero hubo un problema. Podés llamar al 011 6028‑1211 para coordinar directo."})
+            return jsonify({
+                "respuesta": "❌ Intenté derivarte, pero hubo un problema. Podés llamar al 011 6028‑1211 para coordinar directo."
+            })
     except Exception as e:
         print("❌ Error al derivar:", e)
-        return jsonify({"respuesta": "❌ No pude avisar al asesor en este momento. Podés llamar al 011 6028‑1211 para coordinar directo."})
+        return jsonify({
+            "respuesta": "❌ No pude avisar al asesor en este momento. Podés llamar al 011 6028‑1211 para coordinar directo."
+        })
 
 
 def detectar_producto_mencionado(texto):
