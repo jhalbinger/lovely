@@ -43,9 +43,8 @@ def responder():
         print("🔎 JSON recibido desde WhatsApp/Twilio:")
         print(json.dumps(datos, indent=2))
 
-        mensaje_usuario = datos.get("consulta", "").lower().strip()
-
-        # CORRECCIÓN AQUÍ ✅
+        # 🔑 Cambios clave acá:
+        mensaje_usuario = datos.get("Body", "").lower().strip()
         from_number = datos.get("From", "").replace("whatsapp:", "")
         user_id = from_number if from_number else "anon"
 
@@ -92,15 +91,7 @@ def responder_normal(mensaje_usuario, user_id):
     system_prompt = (
         "Sos un asistente virtual de *Lovely Taller Deco* 🛋️. "
         "Respondé solo con la información del CONTEXTO, no inventes nada. "
-        "\n\n➡️ **Formato WhatsApp:**\n"
-        "- Usá *un solo asterisco* para resaltar palabras clave (productos, precios, direcciones).\n"
-        "- Usá ✅ para listas y agregá SALTOS DE LÍNEA entre frases.\n"
-        "- Máximo 2 emojis por respuesta.\n"
-        "➡️ **Extensión:** Breve (máx 4-5 líneas).\n"
-        "➡️ **Comportamiento:**\n"
-        "- Saludá solo la primera vez.\n"
-        "- No repitas showroom/ubicación salvo que lo pidan.\n"
-        "- Si no está en el CONTEXTO invitá a visitar o llamar al 011 6028‑1211."
+        "Usá *un solo asterisco* para resaltar palabras clave, ✅ para listas, máx 2 emojis. Breve y clara."
     )
 
     historial = list(historial_conversacion[user_id])
@@ -127,19 +118,13 @@ def responder_normal(mensaje_usuario, user_id):
 
 def forzar_derivacion(user_id):
     producto = producto_usuario.get(user_id, "No especificado")
-    mensaje_dueño = (
-        f"Usuario: {user_id}\n"
-        f"Producto consultado: {producto}"
-    )
+    mensaje_dueño = f"Usuario: {user_id}\nProducto consultado: {producto}"
     return enviar_derivacion(user_id, mensaje_dueño)
 
 def derivar_asesor(user_id):
     estado_usuario[user_id] = "derivado"
     producto = producto_usuario.get(user_id, "No especificado")
-    mensaje_dueño = (
-        f"Usuario: {user_id}\n"
-        f"Producto consultado: {producto}"
-    )
+    mensaje_dueño = f"Usuario: {user_id}\nProducto consultado: {producto}"
     return enviar_derivacion(user_id, mensaje_dueño)
 
 def enviar_derivacion(user_id, mensaje_dueño):
