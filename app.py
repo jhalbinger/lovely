@@ -20,6 +20,7 @@ client = openai.OpenAI(
 
 app = Flask(__name__)
 
+# === CONTEXTO FIJO ===
 txt_path = "lovely_taller.txt"
 if os.path.exists(txt_path):
     with open(txt_path, "r", encoding="utf-8") as f:
@@ -27,53 +28,63 @@ if os.path.exists(txt_path):
 else:
     CONTEXTO_COMPLETO = ""
 
+# === Memoria ===
 historial_conversacion = defaultdict(lambda: deque(maxlen=4))
 estado_usuario = {}
 producto_usuario = {}
 
 TRIGGER_DERIVACION = [
     "hablar con alguien", "pasar con", "asesor", "humano",
-    "persona", "me pasas con alguien", "quiero hablar con alguien"
+    "persona", "quiero hablar", "me pasas con alguien"
 ]
 
 @app.route("/webhook", methods=["POST"])
 def responder():
     try:
         datos = request.get_json()
-        print("🔎 JSON recibido desde WhatsApp/Twilio:")
+        print("🔎 JSON recibido desde Watson:")
         print(json.dumps(datos, indent=2))
 
-        # 🔑 Cambios clave acá:
-        mensaje_usuario = datos.get("Body", "").lower().strip()
-        from_number = datos.get("From", "").replace("whatsapp:", "")
-        user_id = from_number if from_number else "anon"
+        # ✅ Watson SIEMPRE manda estos campos
+        mensaje_usuario = datos.get("consulta", "").lower().strip()
+        user_id = datos.get("user_id", "anon")  # <- número real debe venir de Watson
 
         if not mensaje_usuario:
             return jsonify({"error": "No se recibió ninguna consulta"}), 400
 
+        # Si ya fue derivado, sigue respondiendo pero no vuelve a ofrecer
         if estado_usuario.get(user_id) == "derivado":
             return responder_normal(mensaje_usuario, user_id)
 
+        # Si usuario pide humano directo (palabras clave)
         if any(trigger in mensaje_usuario for trigger in TRIGGER_DERIVACION):
-            return forzar_derivacion(user_id)
+            return derivar_asesor(user_id)
 
+        # Si estaba esperando confirmación para derivar
         if estado_usuario.get(user_id) == "esperando_confirmacion":
             if mensaje_usuario in ["sí", "si", "dale", "ok", "quiero", "confirmo"]:
                 return derivar_asesor(user_id)
             else:
+                # cancela la oferta de derivación
                 estado_usuario.pop(user_id, None)
                 return jsonify({"respuesta": "👌 Sin problema, cualquier cosa podés consultarme por acá cuando quieras."})
 
+        # Detectar producto mencionado
         prod_detectado = detectar_producto_mencionado(mensaje_usuario)
         if prod_detectado:
             producto_usuario[user_id] = prod_detectado
 
+        # Contar consultas previas en esta sesión
         consultas_previas = [msg for rol, msg in historial_conversacion[user_id] if rol == "user"]
         cantidad_consultas_ahora = len(consultas_previas) + 1
 
+        # Guardar mensaje en historial
         historial_conversacion[user_id].append(("user", mensaje_usuario))
+
+        # Responder normalmente
         respuesta_normal = responder_normal(mensaje_usuario, user_id)
 
+        # Después de 3 consultas, ofrecer derivación
         if cantidad_consultas_ahora == 3 and estado_usuario.get(user_id) != "derivado":
             estado_usuario[user_id] = "esperando_confirmacion"
             extra = "\n\n✅ *Si querés, puedo pedir que un asesor te contacte para coordinar la compra. ¿Querés que te llame?*"
@@ -88,10 +99,19 @@ def responder():
         return jsonify({"respuesta": "Estoy tardando en procesar tu consulta, intentá de nuevo en unos segundos 🙏"}), 200
 
 def responder_normal(mensaje_usuario, user_id):
+    """Hace la llamada normal a GPT con contexto y retorna respuesta JSON"""
     system_prompt = (
         "Sos un asistente virtual de *Lovely Taller Deco* 🛋️. "
-        "Respondé solo con la información del CONTEXTO, no inventes nada. "
-        "Usá *un solo asterisco* para resaltar palabras clave, ✅ para listas, máx 2 emojis. Breve y clara."
+        "Respondé solo con la información del CONTEXTO, no inventes nada.\n\n"
+        "➡️ **Formato WhatsApp:**\n"
+        "- Usá *un solo asterisco* para resaltar palabras clave (productos, precios, direcciones).\n"
+        "- Usá ✅ para listas y agregá SALTOS DE LÍNEA.\n"
+        "- Máximo 2 emojis por respuesta.\n"
+        "➡️ **Extensión:** Breve (máx 4-5 líneas).\n"
+        "➡️ **Comportamiento:**\n"
+        "- Saludá solo la primera vez.\n"
+        "- No repitas showroom/ubicación salvo que lo pidan.\n"
+        "- Si no está en el CONTEXTO invitá a visitar el showroom o llamar al 011 6028‑1211."
     )
 
     historial = list(historial_conversacion[user_id])
@@ -116,25 +136,27 @@ def responder_normal(mensaje_usuario, user_id):
 
     return jsonify({"respuesta": respuesta_llm})
 
-def forzar_derivacion(user_id):
-    producto = producto_usuario.get(user_id, "No especificado")
-    mensaje_dueño = f"Usuario: {user_id}\nProducto consultado: {producto}"
-    return enviar_derivacion(user_id, mensaje_dueño)
-
 def derivar_asesor(user_id):
+    """Envia derivación al endpoint externo"""
     estado_usuario[user_id] = "derivado"
     producto = producto_usuario.get(user_id, "No especificado")
-    mensaje_dueño = f"Usuario: {user_id}\nProducto consultado: {producto}"
+
+    # ✅ Enviar número + producto consultado
+    mensaje_dueño = f"Producto consultado: {producto}"
+
     return enviar_derivacion(user_id, mensaje_dueño)
 
-def enviar_derivacion(user_id, mensaje_dueño):
+def enviar_derivacion(numero_cliente, mensaje_dueño):
+    """Llama al microservicio derivador"""
     try:
         resp = requests.post(
             "https://derivacion-humano.onrender.com/derivar-humano",
-            json={"numero": user_id, "consulta": mensaje_dueño}
+            json={
+                "numero": numero_cliente,      # ← se manda el número real
+                "consulta": mensaje_dueño      # ← solo el motivo
+            }
         )
         if resp.status_code == 200:
-            estado_usuario[user_id] = "derivado"
             return jsonify({
                 "respuesta": "✅ Ya avisé a un asesor para que te contacte. Mientras tanto sigo disponible 😉"
             })
@@ -160,6 +182,10 @@ def detectar_producto_mencionado(texto):
         if p in texto_lower:
             return p.title()
     return None
+
+@app.route("/")
+def index():
+    return "✅ Webhook activo."
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
