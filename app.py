@@ -21,7 +21,7 @@ client = openai.OpenAI(
 
 app = Flask(__name__)
 
-# === CARGAR TODO EL CONTEXTO UNA SOLA VEZ ===
+# === CARGAR CONTEXTO UNA SOLA VEZ ===
 txt_path = "lovely_taller.txt"
 if os.path.exists(txt_path):
     with open(txt_path, "r", encoding="utf-8") as f:
@@ -29,12 +29,11 @@ if os.path.exists(txt_path):
 else:
     CONTEXTO_COMPLETO = ""
 
-# Memoria por usuario: últimas 4 interacciones para GPT
+# Historial de conversaciones para GPT
 historial_conversacion = defaultdict(lambda: deque(maxlen=4))
-
-# Estado de cada usuario: "esperando_confirmacion" o "derivado"
+# Estado del usuario: "esperando_confirmacion", "derivado" o None
 estado_usuario = {}
-# Último producto consultado por usuario
+# Último producto consultado
 producto_usuario = {}
 
 # Palabras clave que fuerzan derivación inmediata
@@ -56,40 +55,41 @@ def responder():
         if not mensaje_usuario:
             return jsonify({"error": "No se recibió ninguna consulta"}), 400
 
-        # === Si ya fue derivado en esta sesión, no derivar de nuevo ===
+        # ✅ Si ya fue derivado en esta sesión, solo responde normal
         if estado_usuario.get(user_id) == "derivado":
             return responder_normal(mensaje_usuario, user_id)
 
-        # === Si usuario pide explícitamente hablar con alguien, forzamos derivación ===
+        # ✅ Si usuario pide explícitamente hablar con alguien → derivar directo
         if any(trigger in mensaje_usuario for trigger in TRIGGER_DERIVACION):
             return forzar_derivacion(user_id)
 
-        # === Si está esperando confirmación de derivación ===
+        # ✅ Si está esperando confirmación para derivar
         if estado_usuario.get(user_id) == "esperando_confirmacion":
             if mensaje_usuario in ["sí", "si", "dale", "ok", "quiero", "confirmo"]:
                 return derivar_asesor(user_id)
             else:
-                # Si dice "no" o algo distinto, cancela derivación
+                # Cancela derivación y sigue normal
                 estado_usuario.pop(user_id, None)
                 return jsonify({"respuesta": "👌 Sin problema, cualquier cosa podés consultarme por acá cuando quieras."})
 
-        # === Intentamos detectar si menciona un producto en esta consulta ===
+        # ✅ Detectar si menciona un producto
         prod_detectado = detectar_producto_mencionado(mensaje_usuario)
         if prod_detectado:
             producto_usuario[user_id] = prod_detectado
 
-        # === Agregamos esta consulta al historial ANTES de decidir ===
+        # ✅ Contar consultas ANTES de responder
+        consultas_previas = [msg for rol, msg in historial_conversacion[user_id] if rol == "user"]
+        cantidad_consultas_previas = len(consultas_previas)
+        cantidad_consultas_ahora = cantidad_consultas_previas + 1
+
+        # ✅ Guardar esta consulta en historial
         historial_conversacion[user_id].append(("user", mensaje_usuario))
 
-        # Contamos cuántas consultas ha hecho el usuario hasta ahora
-        consultas_usuario = [msg for rol, msg in historial_conversacion[user_id] if rol == "user"]
-        cantidad_consultas = len(consultas_usuario)
-
-        # Flujo normal con GPT
+        # ✅ Responder normalmente con GPT
         respuesta_normal = responder_normal(mensaje_usuario, user_id)
 
-        # Si ya hizo 3 consultas, le ofrecemos derivación (solo una vez)
-        if cantidad_consultas >= 3 and estado_usuario.get(user_id) != "derivado":
+        # ✅ Si esta es EXACTAMENTE la 3.ª consulta → ofrecer derivación
+        if cantidad_consultas_ahora == 3 and estado_usuario.get(user_id) != "derivado":
             estado_usuario[user_id] = "esperando_confirmacion"
             extra = "\n\n✅ *Si querés, puedo pedir que un asesor te contacte para coordinar la compra. ¿Querés que te llame?*"
             respuesta_data = json.loads(respuesta_normal.get_data())
@@ -104,7 +104,7 @@ def responder():
 
 
 def responder_normal(mensaje_usuario, user_id):
-    """Flujo original de GPT para respuestas normales"""
+    """Flujo normal con GPT"""
     system_prompt = (
         "Sos un asistente virtual de *Lovely Taller Deco* 🛋️. "
         "Respondé solo con la información del CONTEXTO, no inventes nada. "
@@ -148,14 +148,14 @@ def responder_normal(mensaje_usuario, user_id):
 
     respuesta_llm = respuesta.choices[0].message.content.strip()
 
-    # Guardamos historial con la respuesta
+    # Guardar la respuesta en historial
     historial_conversacion[user_id].append(("bot", respuesta_llm))
 
     return jsonify({"respuesta": respuesta_llm})
 
 
 def forzar_derivacion(user_id):
-    """Cuando el cliente pide explícitamente hablar con alguien"""
+    """Forzar derivación cuando el cliente lo pide explícitamente"""
     producto = producto_usuario.get(user_id, "No especificado")
     mensaje_para_dueño = (
         f"📩 Usuario {user_id} pidió hablar con un asesor.\n"
@@ -178,7 +178,7 @@ def forzar_derivacion(user_id):
 
 
 def derivar_asesor(user_id):
-    """Cuando acepta ser derivado tras la oferta"""
+    """Derivar cuando el cliente acepta la oferta tras la 3.ª consulta"""
     estado_usuario[user_id] = "derivado"
     producto = producto_usuario.get(user_id, "No especificado")
     mensaje_para_dueño = (
@@ -201,7 +201,7 @@ def derivar_asesor(user_id):
 
 
 def detectar_producto_mencionado(texto):
-    """Busca si el mensaje menciona un producto específico del contexto"""
+    """Detectar si menciona un producto del catálogo"""
     productos = [
         "sillón nube", "sillón roma", "sillón bella", "sillón lady",
         "puff", "esquinero", "mecedora", "respaldo", "silla pétalo",
