@@ -32,10 +32,16 @@ else:
 # Memoria por usuario: últimas 4 interacciones para GPT
 historial_conversacion = defaultdict(lambda: deque(maxlen=4))
 
-# Estado de cada usuario: puede ser "esperando_confirmacion" o "derivado"
+# Estado de cada usuario: "esperando_confirmacion" o "derivado"
 estado_usuario = {}
 # Último producto consultado por usuario
 producto_usuario = {}
+
+# Palabras clave que fuerzan derivación inmediata
+TRIGGER_DERIVACION = [
+    "hablar con alguien", "pasar con", "asesor", "humano",
+    "persona", "me pasas con alguien", "quiero hablar con alguien"
+]
 
 @app.route("/webhook", methods=["POST"])
 def responder():
@@ -44,7 +50,7 @@ def responder():
         print("🔎 JSON recibido desde WhatsApp/Twilio:")
         print(json.dumps(datos, indent=2))
 
-        mensaje_usuario = datos.get("consulta", "")
+        mensaje_usuario = datos.get("consulta", "").lower().strip()
         user_id = datos.get("user_id", "anon").strip()
 
         if not mensaje_usuario:
@@ -54,36 +60,14 @@ def responder():
         if estado_usuario.get(user_id) == "derivado":
             return responder_normal(mensaje_usuario, user_id)
 
+        # === Si usuario pide explícitamente hablar con alguien, forzamos derivación ===
+        if any(trigger in mensaje_usuario for trigger in TRIGGER_DERIVACION):
+            return forzar_derivacion(user_id)
+
         # === Si está esperando confirmación de derivación ===
         if estado_usuario.get(user_id) == "esperando_confirmacion":
-            if mensaje_usuario.lower() in ["sí", "si", "dale", "ok", "quiero", "confirmo"]:
-                # ✅ Derivar solo una vez por sesión
-                estado_usuario[user_id] = "derivado"
-
-                # Producto consultado
-                producto = producto_usuario.get(user_id, "No especificado")
-
-                mensaje_para_dueño = (
-                    f"📩 Usuario {user_id} pidió hablar con un asesor.\n"
-                    f"🛋️ Producto consultado: {producto}"
-                )
-
-                try:
-                    resp = requests.post(
-                        "https://derivacion-humano.onrender.com/derivar-humano",
-                        json={"numero": user_id, "consulta": mensaje_para_dueño}
-                    )
-                    if resp.status_code == 200:
-                        respuesta_llm = "✅ Listo, ya avisé a un asesor para que te contacte. Mientras tanto, cualquier consulta seguí escribiéndome por acá que sigo a disposición 😉"
-                    else:
-                        print("❌ Error Twilio:", resp.text)
-                        respuesta_llm = "❌ Intenté derivarte, pero hubo un problema. Podés llamar al 011 6028‑1211 para coordinar directo."
-                except Exception as e:
-                    print("❌ Error al derivar:", e)
-                    respuesta_llm = "❌ No pude avisar al asesor en este momento. Podés llamar al 011 6028‑1211 para coordinar directo."
-
-                return jsonify({"respuesta": respuesta_llm})
-
+            if mensaje_usuario in ["sí", "si", "dale", "ok", "quiero", "confirmo"]:
+                return derivar_asesor(user_id)
             else:
                 # Si dice "no" o algo distinto, cancela derivación
                 estado_usuario.pop(user_id, None)
@@ -94,14 +78,17 @@ def responder():
         if prod_detectado:
             producto_usuario[user_id] = prod_detectado
 
-        # === Flujo normal con GPT ===
-        respuesta_normal = responder_normal(mensaje_usuario, user_id)
+        # === Agregamos esta consulta al historial ANTES de decidir ===
+        historial_conversacion[user_id].append(("user", mensaje_usuario))
 
-        # Contamos cuántas consultas ha hecho este usuario
+        # Contamos cuántas consultas ha hecho el usuario hasta ahora
         consultas_usuario = [msg for rol, msg in historial_conversacion[user_id] if rol == "user"]
         cantidad_consultas = len(consultas_usuario)
 
-        # Si ya hizo al menos 3 consultas, después de responder le ofrecemos derivación
+        # Flujo normal con GPT
+        respuesta_normal = responder_normal(mensaje_usuario, user_id)
+
+        # Si ya hizo 3 consultas, le ofrecemos derivación (solo una vez)
         if cantidad_consultas >= 3 and estado_usuario.get(user_id) != "derivado":
             estado_usuario[user_id] = "esperando_confirmacion"
             extra = "\n\n✅ *Si querés, puedo pedir que un asesor te contacte para coordinar la compra. ¿Querés que te llame?*"
@@ -118,7 +105,6 @@ def responder():
 
 def responder_normal(mensaje_usuario, user_id):
     """Flujo original de GPT para respuestas normales"""
-    # PROMPT ESPECIAL PARA WHATSAPP
     system_prompt = (
         "Sos un asistente virtual de *Lovely Taller Deco* 🛋️. "
         "Respondé solo con la información del CONTEXTO, no inventes nada. "
@@ -142,7 +128,6 @@ def responder_normal(mensaje_usuario, user_id):
         "- Si la consulta no está en el CONTEXTO, no inventes; invitá a visitar el showroom 🏠 o llamar al 011 6028‑1211.\n"
     )
 
-    # Historial para GPT
     historial = list(historial_conversacion[user_id])
     mensajes_historial = [{"role": rol, "content": msg} for rol, msg in historial]
     mensajes_historial.append({"role": "user", "content": mensaje_usuario})
@@ -163,11 +148,56 @@ def responder_normal(mensaje_usuario, user_id):
 
     respuesta_llm = respuesta.choices[0].message.content.strip()
 
-    # Guardamos historial
-    historial_conversacion[user_id].append(("user", mensaje_usuario))
+    # Guardamos historial con la respuesta
     historial_conversacion[user_id].append(("bot", respuesta_llm))
 
     return jsonify({"respuesta": respuesta_llm})
+
+
+def forzar_derivacion(user_id):
+    """Cuando el cliente pide explícitamente hablar con alguien"""
+    producto = producto_usuario.get(user_id, "No especificado")
+    mensaje_para_dueño = (
+        f"📩 Usuario {user_id} pidió hablar con un asesor.\n"
+        f"🛋️ Producto consultado: {producto}"
+    )
+    try:
+        resp = requests.post(
+            "https://derivacion-humano.onrender.com/derivar-humano",
+            json={"numero": user_id, "consulta": mensaje_para_dueño}
+        )
+        if resp.status_code == 200:
+            estado_usuario[user_id] = "derivado"
+            return jsonify({"respuesta": "✅ Te paso con un asesor, ya le avisé. Mientras tanto, seguí escribiéndome si necesitás más info 😉"})
+        else:
+            print("❌ Error Twilio:", resp.text)
+            return jsonify({"respuesta": "❌ Intenté derivarte, pero hubo un problema. Podés llamar al 011 6028‑1211 para coordinar directo."})
+    except Exception as e:
+        print("❌ Error al derivar:", e)
+        return jsonify({"respuesta": "❌ No pude avisar al asesor en este momento. Podés llamar al 011 6028‑1211 para coordinar directo."})
+
+
+def derivar_asesor(user_id):
+    """Cuando acepta ser derivado tras la oferta"""
+    estado_usuario[user_id] = "derivado"
+    producto = producto_usuario.get(user_id, "No especificado")
+    mensaje_para_dueño = (
+        f"📩 Usuario {user_id} pidió hablar con un asesor.\n"
+        f"🛋️ Producto consultado: {producto}"
+    )
+    try:
+        resp = requests.post(
+            "https://derivacion-humano.onrender.com/derivar-humano",
+            json={"numero": user_id, "consulta": mensaje_para_dueño}
+        )
+        if resp.status_code == 200:
+            return jsonify({"respuesta": "✅ Listo, ya avisé a un asesor para que te contacte. Mientras tanto, cualquier consulta seguí escribiéndome por acá que sigo a disposición 😉"})
+        else:
+            print("❌ Error Twilio:", resp.text)
+            return jsonify({"respuesta": "❌ Intenté derivarte, pero hubo un problema. Podés llamar al 011 6028‑1211 para coordinar directo."})
+    except Exception as e:
+        print("❌ Error al derivar:", e)
+        return jsonify({"respuesta": "❌ No pude avisar al asesor en este momento. Podés llamar al 011 6028‑1211 para coordinar directo."})
 
 
 def detectar_producto_mencionado(texto):
