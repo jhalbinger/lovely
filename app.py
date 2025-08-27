@@ -55,6 +55,12 @@ def responder():
         if not mensaje_usuario:
             return jsonify({"error": "No se recibió ninguna consulta"}), 400
 
+        # 👉 Si es la primera interacción con este número, enviar saludo fijo
+        if not historial_conversacion[numero_cliente]:
+            saludo = "¡Hola! Soy el asistente virtual de *Lovely Taller Deco* 🛋️. ¿En qué puedo ayudarte hoy?"
+            historial_conversacion[numero_cliente].append(("bot", saludo))
+            return jsonify({"respuesta": saludo})
+
         # Si ya fue derivado, sigue respondiendo pero no vuelve a ofrecer
         if estado_usuario.get(numero_cliente) == "derivado":
             return responder_normal(mensaje_usuario, numero_cliente)
@@ -110,8 +116,7 @@ def responder_normal(mensaje_usuario, numero_cliente):
     """Hace la llamada normal a GPT con contexto y retorna respuesta JSON"""
     system_prompt = (
         "Sos un asistente virtual de *Lovely Taller Deco* 🛋️.\n\n"
-        "➡️ **Reglas de estilo (aplícalas SIEMPRE, incluso en la primera respuesta):**\n"
-        "- Saludá solo la primera vez, pero mantené el mismo formato.\n"
+        "➡️ **Reglas de estilo (aplícalas SIEMPRE):**\n"
         "- Respondé solo con la información del CONTEXTO, no inventes nada.\n"
         "- Usá *un solo asterisco* para resaltar palabras clave (productos, precios, direcciones).\n"
         "- Usá ✅ para listas y agregá SALTOS DE LÍNEA.\n"
@@ -147,10 +152,10 @@ def responder_normal(mensaje_usuario, numero_cliente):
 def derivar_asesor(numero_cliente):
     """Envia derivación al endpoint externo"""
     estado_usuario[numero_cliente] = "derivado"
-    producto = producto_usuario.get(numero_cliente, "No especificado")
+    producto = producto_usuario.get(numero_cliente, None)
 
-    # ✅ Enviar número + producto consultado
-    mensaje_dueño = f"Producto consultado: {producto}"
+    # ✅ Enviar solo producto si hay, o mensaje genérico
+    mensaje_dueño = producto if producto else "Consulta sin producto específico"
 
     return enviar_derivacion(numero_cliente, mensaje_dueño)
 
