@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
 import openai
 import os
 from dotenv import load_dotenv
@@ -53,7 +53,7 @@ def responder():
         numero_cliente = datos.get("numero", "").strip() or "anon"
 
         if not mensaje_usuario:
-            return "⚠️ No se recibió ninguna consulta", 200
+            return jsonify({"error": "No se recibió ninguna consulta"}), 400
 
         # Si ya fue derivado, sigue respondiendo pero no vuelve a ofrecer
         if estado_usuario.get(numero_cliente) == "derivado":
@@ -72,7 +72,7 @@ def responder():
                 return derivar_asesor(numero_cliente)
             elif mensaje_usuario in negativos:
                 estado_usuario.pop(numero_cliente, None)
-                return "👌 Sin problema, cualquier cosa podés consultarme por acá cuando quieras.", 200
+                return jsonify({"respuesta": "👌 Sin problema, cualquier cosa podés consultarme por acá cuando quieras."})
             else:
                 # 👉 Si no es ni sí ni no, responder normalmente
                 return responder_normal(mensaje_usuario, numero_cliente)
@@ -96,17 +96,19 @@ def responder():
         if cantidad_consultas_ahora == 3 and estado_usuario.get(numero_cliente) != "derivado":
             estado_usuario[numero_cliente] = "esperando_confirmacion"
             extra = "\n\n✅ *Si querés, puedo pedir que un asesor te contacte para coordinar la compra. ¿Querés que te llame?*"
-            return respuesta_normal + extra, 200
+            respuesta_data = json.loads(respuesta_normal.get_data())
+            respuesta_data["respuesta"] += extra
+            return jsonify(respuesta_data)
 
-        return respuesta_normal, 200
+        return respuesta_normal
 
     except Exception as e:
         print("💥 Error detectado:", e)
-        return "Estoy tardando en procesar tu consulta, intentá de nuevo en unos segundos 🙏", 200
+        return jsonify({"respuesta": "Estoy tardando en procesar tu consulta, intentá de nuevo en unos segundos 🙏"}), 200
 
 
 def responder_normal(mensaje_usuario, numero_cliente):
-    """Hace la llamada normal a GPT con contexto y retorna respuesta de texto plano"""
+    """Hace la llamada normal a GPT con contexto y retorna respuesta JSON"""
     system_prompt = (
         "Sos un asistente virtual de *Lovely Taller Deco* 🛋️.\n\n"
         "➡️ **Reglas de estilo (aplícalas SIEMPRE, incluso en la primera respuesta):**\n"
@@ -143,7 +145,7 @@ def responder_normal(mensaje_usuario, numero_cliente):
     respuesta_llm = respuesta.choices[0].message.content.strip()
     historial_conversacion[numero_cliente].append(("bot", respuesta_llm))
 
-    return respuesta_llm
+    return jsonify({"respuesta": respuesta_llm})
 
 
 def derivar_asesor(numero_cliente):
@@ -168,13 +170,19 @@ def enviar_derivacion(numero_cliente, mensaje_dueño):
             }
         )
         if resp.status_code == 200:
-            return "✅ Ya avisé a un asesor para que te contacte. Mientras tanto sigo disponible 😉", 200
+            return jsonify({
+                "respuesta": "✅ Ya avisé a un asesor para que te contacte. Mientras tanto sigo disponible 😉"
+            })
         else:
             print("❌ Error derivando:", resp.text)
-            return "❌ Hubo un problema. Podés llamar al 011 6028-1211 para coordinar.", 200
+            return jsonify({
+                "respuesta": "❌ Hubo un problema. Podés llamar al 011 6028-1211 para coordinar."
+            })
     except Exception as e:
         print("❌ Excepción derivando:", e)
-        return "❌ No pude avisar al asesor. Llamá al 011 6028-1211.", 200
+        return jsonify({
+            "respuesta": "❌ No pude avisar al asesor. Llamá al 011 6028-1211."
+        })
 
 
 def detectar_producto_mencionado(texto):
