@@ -106,22 +106,19 @@ def responder():
         print("💥 Error detectado:", e)
         return jsonify({"respuesta": "Estoy tardando en procesar tu consulta, intentá de nuevo en unos segundos 🙏"}), 200
 
-
 def responder_normal(mensaje_usuario, numero_cliente):
     """Hace la llamada normal a GPT con contexto y retorna respuesta JSON"""
     system_prompt = (
         "Sos un asistente virtual de *Lovely Taller Deco* 🛋️.\n\n"
         "➡️ **Reglas de estilo (aplícalas SIEMPRE, incluso en la primera respuesta):**\n"
-        "- Respondé siempre con formato WhatsApp breve (máx 4-5 líneas).\n"
+        "- Saludá solo la primera vez, pero mantené el mismo formato.\n"
+        "- Respondé solo con la información del CONTEXTO, no inventes nada.\n"
         "- Usá *un solo asterisco* para resaltar palabras clave (productos, precios, direcciones).\n"
         "- Usá ✅ para listas y agregá SALTOS DE LÍNEA.\n"
         "- Máximo 2 emojis por respuesta.\n"
+        "- Extensión breve: máx 4-5 líneas.\n"
         "- No uses links en formato [texto](url). Si tenés que compartir un link, escribilo como texto plano.\n"
         "- No uses títulos largos ni formato de página web.\n"
-        "- Saludá SOLO si el usuario inició con un saludo genérico como 'hola', 'buen día', 'quién sos'. "
-        "En ese caso, hacé un saludo breve y mencioná que sos asistente de Lovely Taller Deco.\n"
-        "- Si el usuario arranca con una pregunta concreta (ej: 'qué sillones venden'), respondé directo a la consulta SIN saludo extra.\n"
-        "- Respondé solo con la información del CONTEXTO, no inventes nada.\n"
         "- Si no está en el CONTEXTO, invitá a visitar el showroom o llamar al 011 6028-1211."
     )
 
@@ -147,17 +144,15 @@ def responder_normal(mensaje_usuario, numero_cliente):
 
     return jsonify({"respuesta": respuesta_llm})
 
-
 def derivar_asesor(numero_cliente):
     """Envia derivación al endpoint externo"""
     estado_usuario[numero_cliente] = "derivado"
-    producto = producto_usuario.get(numero_cliente, None)
+    producto = producto_usuario.get(numero_cliente, "No especificado")
 
-    # ✅ Enviar solo producto si hay, o mensaje genérico
-    mensaje_dueño = producto if producto else "Consulta sin producto específico"
+    # ✅ Enviar número + producto consultado
+    mensaje_dueño = f"Producto consultado: {producto}"
 
     return enviar_derivacion(numero_cliente, mensaje_dueño)
-
 
 def enviar_derivacion(numero_cliente, mensaje_dueño):
     """Llama al microservicio derivador"""
@@ -184,7 +179,6 @@ def enviar_derivacion(numero_cliente, mensaje_dueño):
             "respuesta": "❌ No pude avisar al asesor. Llamá al 011 6028-1211."
         })
 
-
 def detectar_producto_mencionado(texto):
     productos = [
         "sillón nube", "sillón roma", "sillón bella", "sillón lady",
@@ -197,11 +191,9 @@ def detectar_producto_mencionado(texto):
             return p.title()
     return None
 
-
 @app.route("/")
 def index():
     return "✅ Webhook activo."
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
