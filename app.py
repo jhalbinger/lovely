@@ -44,7 +44,7 @@ def responder():
     try:
         datos = request.get_json()
         print("🔎 JSON recibido desde Watson:")
-        print(json.dumps(datos, indent=2))
+        print(json.dumps(datos, indent=2, ensure_ascii=False))
 
         # ✅ Mensaje del usuario
         mensaje_usuario = datos.get("consulta", "").lower().strip()
@@ -110,16 +110,17 @@ def responder_normal(mensaje_usuario, numero_cliente):
     """Hace la llamada normal a GPT con contexto y retorna respuesta JSON"""
     system_prompt = (
         "Sos un asistente virtual de *Lovely Taller Deco* 🛋️.\n\n"
-        "➡️ **Reglas de estilo (aplícalas SIEMPRE, incluso en la primera respuesta):**\n"
-        "- Saludá solo la primera vez, pero mantené el mismo formato.\n"
-        "- Respondé solo con la información del CONTEXTO, no inventes nada.\n"
+        "➡️ **Reglas de estilo (OBLIGATORIAS en TODAS las respuestas):**\n"
+        "- Formato WhatsApp SIEMPRE: breve (máx 4-5 líneas).\n"
         "- Usá *un solo asterisco* para resaltar palabras clave (productos, precios, direcciones).\n"
-        "- Usá ✅ para listas y agregá SALTOS DE LÍNEA.\n"
-        "- Máximo 2 emojis por respuesta.\n"
-        "- Extensión breve: máx 4-5 líneas.\n"
+        "- Usá ✅ para listas.\n"
+        "- Agregá SALTOS DE LÍNEA para que quede ordenado.\n"
+        "- Usá máximo 2 emojis por respuesta, nunca más.\n"
+        "- Saludá SOLO si el usuario inicia con un saludo genérico (ej: 'hola', 'buen día', 'quién sos').\n"
+        "- Si el usuario hace una pregunta concreta (ej: 'qué sillones venden', 'lo suben a un 15 piso'), respondé DIRECTO sin saludo extra.\n"
         "- No uses links en formato [texto](url). Si tenés que compartir un link, escribilo como texto plano.\n"
-        "- No uses títulos largos ni formato de página web.\n"
-        "- Si no está en el CONTEXTO, invitá a visitar el showroom o llamar al 011 6028-1211."
+        "- No inventes información: respondé solo usando el CONTEXTO.\n"
+        "- Si no está en el CONTEXTO, indicá llamar al *011 6028-1211* o visitar el showroom."
     )
 
     historial = list(historial_conversacion[numero_cliente])
