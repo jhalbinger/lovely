@@ -65,12 +65,17 @@ def responder():
 
         # Si estaba esperando confirmación para derivar
         if estado_usuario.get(numero_cliente) == "esperando_confirmacion":
-            if mensaje_usuario in ["sí", "si", "dale", "ok", "quiero", "confirmo"]:
+            positivos = ["sí", "si", "dale", "ok", "quiero", "confirmo"]
+            negativos = ["no", "no quiero", "no gracias", "después", "mas tarde", "en otro momento"]
+
+            if mensaje_usuario in positivos:
                 return derivar_asesor(numero_cliente)
-            else:
-                # cancela la oferta de derivación
+            elif mensaje_usuario in negativos:
                 estado_usuario.pop(numero_cliente, None)
                 return jsonify({"respuesta": "👌 Sin problema, cualquier cosa podés consultarme por acá cuando quieras."})
+            else:
+                # 👉 Si no es ni sí ni no, responder normalmente
+                return responder_normal(mensaje_usuario, numero_cliente)
 
         # Detectar si mencionó un producto para asociarlo
         prod_detectado = detectar_producto_mencionado(mensaje_usuario)
@@ -114,7 +119,7 @@ def responder_normal(mensaje_usuario, numero_cliente):
         "➡️ **Comportamiento:**\n"
         "- Saludá solo la primera vez.\n"
         "- No repitas showroom/ubicación salvo que lo pidan.\n"
-        "- Si no está en el CONTEXTO invitá a visitar el showroom o llamar al 011 6028‑1211."
+        "- Si no está en el CONTEXTO invitá a visitar el showroom o llamar al 011 6028-1211."
     )
 
     historial = list(historial_conversacion[numero_cliente])
@@ -155,8 +160,8 @@ def enviar_derivacion(numero_cliente, mensaje_dueño):
         resp = requests.post(
             "https://derivacion-humano.onrender.com/derivar-humano",
             json={
-                "numero": numero_cliente,      # ← ahora sí pasa el número que manda Watson
-                "consulta": mensaje_dueño      # ← solo el motivo
+                "numero": numero_cliente,
+                "consulta": mensaje_dueño
             }
         )
         if resp.status_code == 200:
@@ -166,12 +171,12 @@ def enviar_derivacion(numero_cliente, mensaje_dueño):
         else:
             print("❌ Error derivando:", resp.text)
             return jsonify({
-                "respuesta": "❌ Hubo un problema. Podés llamar al 011 6028‑1211 para coordinar."
+                "respuesta": "❌ Hubo un problema. Podés llamar al 011 6028-1211 para coordinar."
             })
     except Exception as e:
         print("❌ Excepción derivando:", e)
         return jsonify({
-            "respuesta": "❌ No pude avisar al asesor. Llamá al 011 6028‑1211."
+            "respuesta": "❌ No pude avisar al asesor. Llamá al 011 6028-1211."
         })
 
 def detectar_producto_mencionado(texto):
